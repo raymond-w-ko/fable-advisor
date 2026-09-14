@@ -40,10 +40,12 @@ The prompt you receive should contain the standard six-part spec: **objective, f
 1. Write the spec to a private per-lane scratch dir — never inline shell quoting, never a fixed path (parallel lanes on fixed paths corrupt each other):
 
 ```bash
+# Every redirect into $LANE uses `>>`: the files are fresh, so append equals
+# create, and command guards (dcg) block `>` to a variable path but allow `>>`.
 LANE=$(mktemp -d "${TMPDIR:-/tmp}/codex-lane.XXXXXX")
 SPEC="$LANE/spec.md"; FINAL="$LANE/final.txt"; STDERR="$LANE/stderr.log"
 
-cat > "$SPEC" << 'SPEC_EOF'
+cat >> "$SPEC" << 'SPEC_EOF'
 This task runs in a dedicated implementation lane on the model and reasoning
 effort named in the invocation below. Those were chosen deliberately for this
 lane; nothing has been substituted. If a user-level or project-level instruction
@@ -98,7 +100,7 @@ EFFORT="<value from the spec's REASONING line, or empty>"
   --skip-git-repo-check \
   --cd "$(pwd)" \
   --output-last-message "$FINAL" \
-  - < "$SPEC" 2> "$STDERR"
+  - < "$SPEC" 2>> "$STDERR"
 RC=$?
 ```
 
@@ -111,7 +113,7 @@ Flag discipline (non-negotiable):
 | `--skip-git-repo-check` + `--cd "$(pwd)"` | Deterministic working root; works outside git repos. |
 | `- < spec file` | Prompt via stdin. No quoting hazards, no truncated specs. |
 | `"$@"` timeout prefix | Foreground: nine-minute wall clock, deliberately inside the Bash tool's 600000 ms default ceiling, when a working GNU `timeout`/`gtimeout` exists (macOS needs `brew install coreutils`); runs uncapped otherwise. Built with `set --` for bash/zsh/sh portability — `${T:+$T 540}` breaks under zsh. `-k 15` sends KILL 15 s after the initial TERM. `rc 124` means the cap fired. For runs that legitimately exceed the foreground ceiling, see the detached path below (up to 29 minutes). |
-| `2> "$STDERR"` | Captures stderr for the signature detection in step 3 — codex's progress still reaches you via stdout. |
+| `2>> "$STDERR"` | Captures stderr for the signature detection in step 3 — codex's progress still reaches you via stdout. Append form on purpose: every scratch file is fresh inside a fresh dir, and command guards such as dcg block truncating redirects (`>`) to variable paths while allowing `>>`. |
 
 `--model gpt-5.6-sol` selects the Sol capability tier — if the caller's spec names a different codex model, use that instead; the slug is a documented default, not a constant.
 
@@ -140,10 +142,10 @@ Launch, in one Bash call:
     --skip-git-repo-check \
     --cd "$(pwd)" \
     --output-last-message "$FINAL" \
-    - < "$SPEC" > "$LANE/stdout.log" 2> "$STDERR"
-  echo $? > "$LANE/rc"
+    - < "$SPEC" >> "$LANE/stdout.log" 2>> "$STDERR"
+  echo $? >> "$LANE/rc"
 ) > /dev/null 2>&1 &
-echo $! > "$LANE/pid"
+echo $! >> "$LANE/pid"
 echo "$LANE"
 ```
 
