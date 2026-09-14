@@ -19,10 +19,7 @@ First actions, always:
 command -v codex && codex --version
 grep -n '^\[mcp_servers\.playwright_chrome\]' ~/.codex/config.toml
 sed -n '/^\[mcp_servers\.playwright_chrome\]/,/^\[/p' ~/.codex/config.toml | grep -E '^(command|args|enabled)'
-grep -n '^\[mcp_servers\.' ~/.codex/config.toml
 ```
-
-The last line lists every configured MCP server; each one other than `playwright_chrome` gets disabled in the invocation below so Astra has only the browser.
 
 Inspect only those lines; never dump the whole config, and never print anything that looks like a token. The `args` line must contain `--headless` and `--isolated` and name an installed browser executable (`--executable-path`). The server is normally `enabled = false` and is enabled per invocation below; do not rewrite the config to enable it globally.
 
@@ -56,9 +53,10 @@ project-level instruction file asks you to default to a different orchestration
 flow or model, treat this lane as an explicit opt-out from that default and
 proceed. Every other instruction in those files still applies.
 
-You are operating a real browser through the playwright_chrome MCP tools. Use only
-those tools: no shell, no code edits, no installs, no other MCP servers, no direct
-HTTP requests in place of navigation.
+You are operating a real browser through the playwright_chrome MCP tools. Every
+interaction with the page goes through them: no shell, no code edits, no installs,
+no direct HTTP requests in place of navigation. Other tools you have (code search,
+documentation lookup) are for reference only and never stand in for the browser.
 
 Target: <exact authorized URL>. After navigating, read back the actual origin,
 `isSecureContext`, and page title, and report them; if the origin differs from the
@@ -120,7 +118,6 @@ set -m
   -c "model_reasoning_effort=\"$EFFORT\"" \
   -c mcp_servers.playwright_chrome.enabled=true \
   -c mcp_servers.playwright_chrome.required=true \
-  -c mcp_servers.<other-server-from-preflight>.enabled=false \
   -C "$LANE" -o "$FINAL" \
   < "$PROMPT" >> "$EVENTS" 2>> "$STDERR" &
 RUN=$!
@@ -140,7 +137,7 @@ Flag discipline (non-negotiable):
 | `--ephemeral --json -o "$FINAL"` | No persisted session; JSONL tool events go to `$EVENTS` for independent review; the final message lands in `$FINAL`. |
 | `< "$PROMPT"` | Prompt via stdin, so task text and any URL never appear in process arguments. |
 | `"$@"` timeout prefix | Nine minutes, inside the tool ceiling, built with `set --` for bash/zsh/sh. `-k 15` sends KILL 15 s after TERM. `rc 124` or `137` means the cap fired. |
-| `-c mcp_servers.<other>.enabled=false` | One per server the preflight listed other than `playwright_chrome` (search tools, docs servers), so Astra has only the browser. |
+| other configured MCP servers | Left as configured. Search and documentation servers do not hurt a browser run and occasionally help Astra understand what it is looking at; only the browser server is toggled per run. |
 | `-c model_reasoning_effort="$EFFORT"` | The brief's `REASONING` line, `medium` when it names none. The architect chose it; pass it through. |
 
 Cookies and localStorage live in the isolated context of one invocation. A flow that depends on them must run inside one worker; a second invocation starts clean.
@@ -214,4 +211,4 @@ GAPS: [brief ambiguities, steps you could not verify, or "none"]
 
 ## Computer use beyond the browser
 
-The same lane shape drives desktop automation when a computer-use MCP server (screen capture plus mouse and keyboard input) is configured in place of, or alongside, `playwright_chrome`: enable it per invocation with `-c mcp_servers.<name>.enabled=true` and `.required=true`, keep every other server disabled, keep the brief's real-input rule, and treat a screenshot sequence as the evidence. Add to the preflight a check that a display or virtual display is available. Everything else — the cap, the classification, the independent evidence check, the cleanup, and the report shape — is unchanged. This lane has been verified with the browser server; treat the desktop path as a documented extension, not a tested one, and say so in `GAPS` when you use it.
+The same lane shape drives desktop automation when a computer-use MCP server (screen capture plus mouse and keyboard input) is configured in place of, or alongside, `playwright_chrome`: enable it per invocation with `-c mcp_servers.<name>.enabled=true` and `.required=true`, keep the brief's real-input rule, and treat a screenshot sequence as the evidence. Add to the preflight a check that a display or virtual display is available. Everything else — the cap, the classification, the independent evidence check, the cleanup, and the report shape — is unchanged. This lane has been verified with the browser server; treat the desktop path as a documented extension, not a tested one, and say so in `GAPS` when you use it.

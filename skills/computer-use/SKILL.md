@@ -77,7 +77,7 @@ Navigation alone, an HTTP 200, or an exit-zero worker are not evidence of the re
 
 ## Beyond the browser: desktop computer use
 
-The same lane extends to desktop automation when a computer-use MCP server (screen capture plus mouse and keyboard) is configured on the host. The doctrine is unchanged: the architect resolves the target and writes the brief; the operator enables only that server for the run, requires real input, treats the screenshot sequence as evidence, and cleans up. Two additions:
+The same lane extends to desktop automation when a computer-use MCP server (screen capture plus mouse and keyboard) is configured on the host. The doctrine is unchanged: the architect resolves the target and writes the brief; the operator enables that server for the run, requires real input, treats the screenshot sequence as evidence, and cleans up. Two additions:
 
 - The preflight must confirm a display or virtual display exists; headless Chrome needs none, a desktop session does.
 - Blast radius is larger. A browser run is confined to one isolated context; a desktop run can reach every window. The brief names the application and the windows it may touch, and forbids everything else.
