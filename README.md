@@ -1,6 +1,8 @@
 # Fable Advisor
 
-**Fable 5.1 runs the show. Codex does the typing at the effort each task deserves, and Fable reviews before anything ships.**
+**Fable 5.1 runs the show. Codex does the typing at the effort each task deserves, Astra drives the browser, and Fable reviews before anything ships.**
+
+> **This is a personal fork** of [DannyMac180/fable-advisor](https://github.com/DannyMac180/fable-advisor) (`upstream`). It carries the v5.1 lane hardening (zsh-safe timeout wrapper, per-lane scratch dirs, sandbox and IPC-mismatch handling, working-directory pinning) and the **`astra-operator`** browser/computer-use lane with its **`computer-use`** skill. Install from this repository (`origin`), not upstream, to get them.
 
 <a href="https://github.com/DannyMac180/fable-advisor/raw/main/assets/fable-advisor-demo.mp4"><img src="assets/fable-advisor-demo-poster.png" alt="30-second demo: Fable 5.1 orchestrates, GPT-5.6 Luna implements, Fable 5.1 reviews" width="100%"></a>
 
@@ -28,9 +30,11 @@ I write [**Attention Heads**](https://attentionheads.substack.com/?utm_source=gi
 ## Install
 
 ```
-claude plugin marketplace add DannyMac180/fable-advisor
+claude plugin marketplace add raymond-w-ko/fable-advisor
 claude plugin install fable-advisor@fable-advisor
 ```
+
+If you already have the upstream marketplace registered under the same name, remove it first (`claude plugin marketplace remove fable-advisor`) so the install resolves to this fork.
 
 Updating an existing installation to the latest release:
 
@@ -106,6 +110,8 @@ touching 3+ files, consult the fable-advisor agent and act on its verdict.
 **Does this work on claude.ai?** No — subagent model routing is Claude Code only (CLI, desktop, VS Code, web).
 
 **Why not just let Fable write the code too?** You can. It's excellent. It's also the most expensive model per token, and most of a session's tokens are implementation mechanics that the codex lanes handle at near-parity — and from a different vendor, which buys you a real second opinion. Spend the premium where it changes outcomes: the architecture and the final review.
+
+**What's in v5.1 (this fork)?** A fourth lane: **`astra-operator`** runs GPT-6 Astra through Codex with an isolated headless Playwright Chrome MCP server for UI verification, screenshots, login flows, drag-and-drop, and browser E2E; the **`computer-use`** skill tells the architect when to route there and what counts as browser evidence. It needs a `playwright_chrome` entry in `~/.codex/config.toml` (headless, isolated, installed Chrome). The codex lanes also gained the hardening listed in the fork note above.
 
 **Upgrading from v4?** v5 moves the session architect from Opus to **Fable 5.1**, replaces the Fable 5 `fable-implementer` lane with **`sol-implementer`** (GPT-5.6 Sol via Codex), and **unpins reasoning effort everywhere** — the architect names it per task in a new sixth spec line. The advisor is now Fable 5.1. The Codex plugin integration is new and optional. If you still want a Claude implementation lane, grab [`fable-implementer.md` from the v4.0 tree](https://github.com/DannyMac180/fable-advisor/blob/ad2bdc3/agents/fable-implementer.md).
 
