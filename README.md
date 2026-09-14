@@ -13,6 +13,7 @@ Claude Code lets every subagent run on a different model — and lets the sessio
 | Routine | **GPT-5.6 Luna** | `codex-implementer` agent (default) | The spec fully determines the outcome — Codex does the typing via the [Codex CLI](https://github.com/openai/codex) |
 | High-complexity | **GPT-5.6 Sol** | `sol-implementer` agent | One-off tasks where judgment the spec can't capture decides the outcome: subtle concurrency, hard debugging, security-sensitive paths, wide refactors |
 | Review | **Fable 5.1** | `fable-advisor` agent | Commitment boundaries, and **always once at the end** — the advisor reviews the accumulated changes before the architect reports done |
+| Browser / computer use | **GPT-6 Astra** | `astra-operator` agent | Any task that needs a real browser — UI verification, screenshots, login flows, drag-and-drop, browser E2E. Astra drives an isolated headless Playwright Chrome through the Codex CLI; the `computer-use` skill carries the doctrine. |
 
 **Nothing is pinned to a reasoning effort.** The architect names the effort per task in the spec (`REASONING: low … max`, and `ultra` on Sol), and the lanes pass it through unchanged — mechanical edits run cheap and fast, the hard escalations run at max or ultra. The session and the advisor run at whatever `/effort` you set.
 
