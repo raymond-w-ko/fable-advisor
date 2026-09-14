@@ -54,7 +54,7 @@ The architect's own effort and the advisor's come from the session (`/effort`), 
 Implementers share none of your conversation context. Every delegation prompt carries all six parts:
 
 1. **Objective** — what to build or change, one paragraph
-2. **Files** — exact paths to create or modify
+2. **Files** — exact paths to create or modify, and the working directory when it is not the session cwd (the lane `cd`s there before launching codex)
 3. **Interfaces** — signatures, types, or API shapes the code must match
 4. **Constraints** — project conventions, things not to touch
 5. **Verification** — the command(s) that prove it works

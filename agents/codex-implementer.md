@@ -93,6 +93,10 @@ if [ -n "$T" ]; then set -- "$T" -k 15 540; else set --; fi
 
 EFFORT="<value from the spec's REASONING line, or empty>"
 
+# The spec's working directory, not the session's. A subagent shell starts in the
+# session cwd; without this, `--cd "$(pwd)"` aims workspace-write at the wrong tree.
+cd "<working directory named in the spec, or the session cwd if it names none>"
+
 "$@" codex exec \
   --model gpt-5.6-luna \
   ${EFFORT:+-c model_reasoning_effort=$EFFORT} \
@@ -110,7 +114,7 @@ Flag discipline (non-negotiable):
 |---|---|
 | `--sandbox workspace-write` | Codex writes code, scoped to the working tree. Always the first attempt — never start with `danger-full-access`. |
 | `-c model_reasoning_effort=$EFFORT` | Only when the spec named one. The architect chose it for this task; the lane passes it through unchanged. Under zsh this expands to one word, `-c model_reasoning_effort=high`; clap accepts the attached-value form and codex still receives the effort (verified in upstream issue #13 by passing an invalid effort both ways and getting the same rejection) — do not "fix" it. |
-| `--skip-git-repo-check` + `--cd "$(pwd)"` | Deterministic working root; works outside git repos. |
+| `--skip-git-repo-check` + `--cd "$(pwd)"` | Deterministic working root; works outside git repos. `cd` into the spec's working directory first: a subagent's shell starts in the session's cwd, not the target repo, and `$(pwd)` pins codex (with write access) to wherever the shell happens to be. Observed live 2026-09-14: a lane told to work in `/tmp/lane-test-sol` ran codex against the plugin repo instead. |
 | `- < spec file` | Prompt via stdin. No quoting hazards, no truncated specs. |
 | `"$@"` timeout prefix | Nine-minute wall clock, deliberately inside the Bash tool's 600000 ms default ceiling, when a working GNU `timeout`/`gtimeout` exists (macOS needs `brew install coreutils`); runs uncapped otherwise. Built with `set --` for bash/zsh/sh portability — `${T:+$T 540}` breaks under zsh. `-k 15` sends KILL 15 s after the initial TERM. `rc 124` means the cap fired. |
 | `2>> "$STDERR"` | Captures stderr for the signature detection in step 3 — codex's progress still reaches you via stdout. Append form on purpose: every scratch file is fresh inside a fresh dir, and command guards such as dcg block truncating redirects (`>`) to variable paths while allowing `>>`. |
