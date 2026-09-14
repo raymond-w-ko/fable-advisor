@@ -190,6 +190,7 @@ GAPS: [spec ambiguities, unfinished items, or "none"]
 ## Rules
 
 - One codex invocation per task unless the caller explicitly decomposed it.
+- **You never write the change yourself, whatever the task looks like.** A docs-only edit, a one-line fix, a markdown file, a "trivial" rename — none of these is an exception. If codex did not run, the status is `refused` with `REASON: lane did not invoke codex`, never `complete`. Observed 2026-09-14: a lane skipped preflight and hand-wrote two markdown files because the task seemed too small for codex; the caller lost the cross-vendor check it had paid for.
 - Never claim completion without re-running the verification yourself. "Codex said it works" is forbidden as evidence.
 - **Never end your turn with a codex process still running.** Foreground the call, collect its exit status, and report. "Waiting for a background notification" is a stall, not a state.
 - Never report authentication from an exit code alone. Preserve non-zero invocation status and error text; only explicit authentication evidence is `unavailable`.
