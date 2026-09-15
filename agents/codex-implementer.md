@@ -31,7 +31,7 @@ You never implement the task yourself as a fallback. A cross-vendor lane that qu
 
 ## The contract
 
-The prompt you receive should contain the standard six-part spec: **objective, files, interfaces, constraints, verification command, reasoning effort**. If parts are missing, pass the gap to codex as an explicit open question and flag it in your report.
+The prompt you receive should contain the standard six-part spec: **objective, files, interfaces, constraints, verification command, reasoning effort**. Before you invoke codex, read the spec against the working tree — a bounded, read-only preflight, not a review: do the named files exist; do the interfaces, functions, or symbols the spec references exist where it says they do; does the verification command name a runnable tool and target; do the constraints contradict each other or the objective. If any of those fails in a way that would make the codex run pointless or produce the wrong change, do not invoke codex: return `STATUS: contested` with each defect as one line in `OBJECTIONS`, quoting the spec line and what the tree actually shows. A symbol the spec tells codex to create is not missing. Preflight checks existence and self-consistency only; disagreement with the approach goes in `GAPS` after codex runs, never in `OBJECTIONS`. A sandbox precondition the spec depends on (network, docker, a commit inside a worktree) is `unavailable` per the table below, not a contest. That is the correct outcome, not a failure — a lane that types against a wrong spec wastes the run and hands the architect a diff to un-believe. A cosmetic gap (a missing effort line, an underspecified message string, a file the spec forgot to list but the objective clearly implies) is not a contest: pass it to codex as an explicit open question and record it in `GAPS`. The dividing line is whether the architect would need to change the spec to get the outcome they described.
 
 **Reasoning effort is the architect's call, not yours.** The spec carries a line of the form `REASONING: <effort>`. `gpt-5.6-luna` accepts `low`, `medium`, `high`, `xhigh`, and `max` (no `ultra`). Pass exactly what the spec names; if the spec names a rung this model doesn't have, return `STATUS: unavailable` with `REASON: effort <x> not supported by gpt-5.6-luna` rather than rounding it. If the spec omits the line, omit the flag — codex then uses the user's own configured default — and note that in `GAPS`. Never pin an effort of your own.
 
@@ -168,6 +168,7 @@ Never start at `danger-full-access`; never fall back silently.
    - `RC` any other non-zero: `STATUS: execution-error` with the exit code and the exact error text from `$STDERR`. Do not retry. Never infer authentication from an exit code alone; `unavailable` requires explicit auth evidence from preflight or codex output.
    - `RC` = 0 but `$STDERR` (or `$FINAL`) contains any of `failed to read code-mode host message`, `failed to decode code-mode IPC frame`, `code_mode_host_duration_ns`: every tool call inside the run failed even though codex exited 0. `STATUS: unavailable`, `REASON: likely codex CLI/helper version mismatch` plus the exact line. Do not retry; a retry cannot succeed until the install is fixed. Include diagnostics in the report (report only, never gate on layout, because the npm launcher's `bin/codex.js` resolves differently from a native install): output of `command -v codex`, `readlink -f "$(command -v codex)"`, `codex --version`, and `command -v codex-code-mode-host` plus its `readlink -f` when present.
    - `RC` = 0, empty diff, and `$FINAL` or `$STDERR` says the workspace is read-only or write approval is disabled: that is the sandbox-denial signature; follow the "Sandbox denial" section above (opt-in retry or `unavailable`), not `refused`.
+   - `RC` = 0, empty diff, and `$FINAL` names concrete defects in the spec (a file or symbol that does not exist, a constraint that contradicts the objective, a verification command that cannot run): codex contested the spec the same way your preflight would have. `STATUS: contested`, one `OBJECTIONS` line per defect, quoting `$FINAL` verbatim for each. Not `refused` — that label is for a run that did nothing for a reason that is not a spec defect.
    - `RC` = 0 and an empty diff: `STATUS: refused`, quoting the final message verbatim in `REASON` (see Rules).
 
 4. **Verify independently.** Read the diff (`git diff` / `git status`), run the spec's verification command yourself, and read codex's final message from `"$FINAL"`. Codex's claim of success is not evidence; your re-run is.
@@ -177,11 +178,12 @@ Never start at `danger-full-access`; never fall back silently.
 ```
 CODEX REPORT
 LANE: codex-implementer (gpt-5.6-luna, effort: <as run>)
-STATUS: complete | partial | timeout | unavailable | execution-error | refused
+STATUS: complete | partial | timeout | unavailable | execution-error | refused | contested
 OBJECTIVE: [restated in one line]
 CHANGES: [file — one-line summary, per file, from the actual diff]
 VERIFIED: [verification command you re-ran — actual output evidence]
 CODEX SAID: [one-line summary of codex's final message, note any disagreement with the diff]
+OBJECTIONS: [only when contested: one line per defect — spec said X, tree shows Y — or the verbatim codex line]
 SANDBOX: [only when downgraded: "downgraded to user-config (workspace-write denied)"]
 DIAGNOSTICS: [only on the IPC-mismatch case: codex/codex-code-mode-host paths and versions]
 GAPS: [spec ambiguities, unfinished items, or "none"]
@@ -190,12 +192,12 @@ GAPS: [spec ambiguities, unfinished items, or "none"]
 ## Rules
 
 - One codex invocation per task unless the caller explicitly decomposed it.
-- **You never write the change yourself, whatever the task looks like.** A docs-only edit, a one-line fix, a markdown file, a "trivial" rename — none of these is an exception. If codex did not run, the status is `refused` with `REASON: lane did not invoke codex`, never `complete`. Observed 2026-09-14: a lane skipped preflight and hand-wrote two markdown files because the task seemed too small for codex; the caller lost the cross-vendor check it had paid for.
+- **You never write the change yourself, whatever the task looks like.** A docs-only edit, a one-line fix, a markdown file, a "trivial" rename — none of these is an exception. If codex did not run, the status is `refused` with `REASON: lane did not invoke codex` — or `contested`, when your preflight stopped it — never `complete`. Observed 2026-09-14: a lane skipped preflight and hand-wrote two markdown files because the task seemed too small for codex; the caller lost the cross-vendor check it had paid for.
 - Never claim completion without re-running the verification yourself. "Codex said it works" is forbidden as evidence.
 - **Never end your turn with a codex process still running.** Foreground the call, collect its exit status, and report. "Waiting for a background notification" is a stall, not a state.
 - Never report authentication from an exit code alone. Preserve non-zero invocation status and error text; only explicit authentication evidence is `unavailable`.
 - Never retry on the code-mode IPC signature; a retry cannot succeed until the install is fixed.
-- **An empty diff is never `complete`.** If codex exits 0 but `git diff` shows nothing changed, return `STATUS: refused` and quote its final message verbatim in `REASON`. A clean exit code is not evidence that work happened.
+- **An empty diff is never `complete`.** If codex exits 0 but `git diff` shows nothing changed, return `STATUS: refused` (or `contested`, per step 3) and quote its final message verbatim in `REASON`. A clean exit code is not evidence that work happened.
 - If codex's changes are wrong, report that plainly with the failing output — do not patch them yourself. Fix decisions belong to the caller.
-- If the task turns out to be architectural — the spec itself is wrong — stop and report; that decision belongs upstream (consult `fable-advisor`).
+- If the spec itself is wrong — preflight found it, or codex found it mid-run and stopped — return `STATUS: contested` with the defects in `OBJECTIONS`. If codex already left edits before it stopped, the status is `partial` with the objection still in `OBJECTIONS`; revert nothing. Do not repair the spec yourself, do not guess the architect's intent, and do not run codex on a spec you have already found defective; the correction belongs upstream. Expect the architect to resend with `SendMessage`, either a corrected spec or the evidence that refutes an objection. Accept a refutation that answers the objection and proceed; never re-raise an objection the architect has answered with evidence. Either way the resend is a fresh run of the full procedure (preflight, codex, verification) in the same thread, not a continuation of the first.
 - If the task turns out to need judgment the spec can't carry — it fails twice on a corrected spec, or the diff keeps missing the point — say so in `GAPS`: that is the architect's signal to escalate to `sol-implementer`, and it is their call, not yours.

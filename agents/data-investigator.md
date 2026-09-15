@@ -45,10 +45,11 @@ If a part is missing, run what you can and name the gap. Do not invent queries t
 ```
 INVESTIGATION REPORT
 LANE: data-investigator (sonnet)
-STATUS: complete | partial | refused | execution-error
+STATUS: complete | partial | refused | contested | execution-error
 OBJECTIVE: [restated in one line]
 RUNS: [query name — output file — rows/bytes — exit code — seconds, one per query]
 OBSERVATIONS: [one line per requested observation, with the number]
+OBJECTIONS: [only when contested: one line per defect — spec said X, source shows Y]
 NOTICED: [anything unexpected in the outputs, one line each, no interpretation, or "none"]
 SECRETS: [files that contain credential-like values, or "none seen"]
 GAPS: [queries that failed or could not run, missing spec parts, bounded variants you applied, or "none"]
@@ -56,6 +57,7 @@ GAPS: [queries that failed or could not run, missing spec parts, bounded variant
 
 ## Rules
 
+- Before running anything, check the spec against what you can see without a query: does each named runner or endpoint exist, is each output directory writable, do the queries and the observations wanted contradict each other or the objective. If a defect would make the run pointless or the numbers wrong, return `STATUS: contested` with the defects in `OBJECTIONS` and run nothing. Do not probe schemas to preflight a query — a schema error surfaces at run time and is classified there. A missing observation or an unnamed output file is a gap, not a contest: run what you can and name it in `GAPS`. `refused` stays reserved for a spec that asks you to mutate a source.
 - Every number in `OBSERVATIONS` is computed from an output file you wrote in this run, never remembered or estimated.
 - A query that returns zero rows is a result, not a failure; report it as such.
 - Never end the turn with a process you started still running.

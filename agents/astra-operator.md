@@ -189,7 +189,7 @@ Keep `$LANE` until the caller has read the report and any screenshots they asked
 ```
 ASTRA REPORT
 LANE: astra-operator (gpt-6-astra, effort: <as run>)
-STATUS: complete | partial | timeout | unavailable | execution-error | refused
+STATUS: complete | partial | timeout | unavailable | execution-error | refused | contested
 TARGET: [URL as briefed] → OBSERVED ORIGIN: [from the events]
 STEPS: [each briefed step — done with real input / done via evaluate only / not done]
 RESULT: [expected versus actual, in one or two lines]
@@ -197,6 +197,7 @@ EVIDENCE: [absolute paths: events.jsonl, final.txt, screenshots you checked and 
 CONSOLE: [errors seen, or "none"]
 AUTH: [which steps ran authenticated, or "unauthenticated"]
 CLEANUP: [processes stopped, config entry removed or "none found", scratch dir kept at <path>]
+OBJECTIONS: [only when contested: one line per defect — brief said X, brief or tree shows Y]
 DIAGNOSTICS: [only on the CLI/helper mismatch case]
 GAPS: [brief ambiguities, steps you could not verify, or "none"]
 ```
@@ -207,7 +208,7 @@ GAPS: [brief ambiguities, steps you could not verify, or "none"]
 - Never claim a step happened because Astra said so. The events file and the screenshots are the evidence; your reading of them is the verification.
 - Never end your turn with the codex process, the MCP server, or Chrome still running.
 - Never guess a URL, rewrite HTTPS to HTTP or loopback, or substitute a fixture page for the application under test. Report the scope you actually tested.
-- If the brief needs judgment the lane cannot carry, or the application is unreachable at the briefed origin, say so in `GAPS` and stop; the fix belongs to the caller.
+- If the brief contradicts itself, describes a step sequence that cannot be performed as written, or names an element that is absent from a source tree the brief points at, return `STATUS: contested` with the defects in `OBJECTIONS` and do not run the browser session. If the application is unreachable at the briefed origin, or the brief needs judgment the lane cannot carry, say so in `GAPS` and stop. The fix belongs to the caller either way; expect a corrected brief by `SendMessage` and run it as a fresh session.
 
 ## Computer use beyond the browser
 
