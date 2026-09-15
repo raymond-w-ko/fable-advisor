@@ -16,6 +16,8 @@ Claude Code lets every subagent run on a different model — and lets the sessio
 | High-complexity | **GPT-5.6 Sol** | `sol-implementer` agent | One-off tasks where judgment the spec can't capture decides the outcome: subtle concurrency, hard debugging, security-sensitive paths, wide refactors |
 | Review | **Fable 5.1** | `fable-advisor` agent | Commitment boundaries, and **always once at the end** — the advisor reviews the accumulated changes before the architect reports done |
 | Browser / computer use | **GPT-6 Astra** | `astra-operator` agent | Any task that needs a real browser — UI verification, screenshots, login flows, drag-and-drop, browser E2E. Astra drives an isolated headless Playwright Chrome through the Codex CLI; the `computer-use` skill carries the doctrine. |
+| Investigation / data pulls | **Claude Sonnet** | `data-investigator` agent | Read-only queries the architect wrote — SQL against a replica, log-platform queries, API listings — run by the lane, written to files, returned as compact tables so raw rows never enter the architect's context. |
+| Review, cross-vendor | **GPT-6 Astra** | `astra-advisor` agent | An independent-family second opinion on a decision, diff, or findings document, run read-only through the Codex CLI at a chosen effort. Complements the Fable review; it never replaces it. |
 
 **Nothing is pinned to a reasoning effort.** The architect names the effort per task in the spec (`REASONING: low … max`, and `ultra` on Sol), and the lanes pass it through unchanged — mechanical edits run cheap and fast, the hard escalations run at max or ultra. The session and the advisor run at whatever `/effort` you set.
 
@@ -110,6 +112,8 @@ touching 3+ files, consult the fable-advisor agent and act on its verdict.
 **Does this work on claude.ai?** No — subagent model routing is Claude Code only (CLI, desktop, VS Code, web).
 
 **Why not just let Fable write the code too?** You can. It's excellent. It's also the most expensive model per token, and most of a session's tokens are implementation mechanics that the codex lanes handle at near-parity — and from a different vendor, which buys you a real second opinion. Spend the premium where it changes outcomes: the architecture and the final review.
+
+**What's in v5.2 (this fork)?** Two more agents: **`data-investigator`** (Claude Sonnet, read-only) runs the architect's queries and returns tables so raw data stays out of the Fable context, and **`astra-advisor`** (GPT-6 Astra via Codex, read-only sandbox) gives a cross-vendor second opinion on decisions, diffs, and findings. The orchestration skill gained a work-types routing table, a cost and duration section, a spec pre-check for existing files, guidance on second review passes and on treating advisor evidence requests as hypotheses, and harness notes.
 
 **What's in v5.1 (this fork)?** A fourth lane: **`astra-operator`** runs GPT-6 Astra through Codex with an isolated headless Playwright Chrome MCP server for UI verification, screenshots, login flows, drag-and-drop, and browser E2E; the **`computer-use`** skill tells the architect when to route there and what counts as browser evidence. It needs a `playwright_chrome` entry in `~/.codex/config.toml` (headless, isolated, installed Chrome). The codex lanes also gained the hardening listed in the fork note above.
 

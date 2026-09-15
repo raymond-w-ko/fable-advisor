@@ -1,7 +1,7 @@
 {
   "name": "fable-advisor",
   "metadata": {
-    "description": "Model-routing patterns for Claude Code: Fable 5.1 architect-as-orchestrator with a GPT-5.6 Luna routine lane, a GPT-5.6 Sol high-complexity lane, per-task reasoning effort, and a Fable 5.1 end-of-deliverable reviewer. Also ships the astra-operator browser/computer-use lane (GPT-6 Astra via Codex with headless Playwright Chrome) and its computer-use skill."
+    "description": "Model-routing patterns for Claude Code: Fable 5.1 architect-as-orchestrator with a GPT-5.6 Luna routine lane, a GPT-5.6 Sol high-complexity lane, per-task reasoning effort, and a Fable 5.1 end-of-deliverable reviewer. Also ships the astra-operator browser/computer-use lane (GPT-6 Astra via Codex with headless Playwright Chrome) and its computer-use skill, the read-only data-investigator lane (Claude Sonnet) for query runs that keep raw data out of the architect context, and the astra-advisor cross-vendor reviewer (GPT-6 Astra via Codex, read-only)."
   },
   "owner": {
     "name": "Dan McAteer",
@@ -11,7 +11,7 @@
     {
       "name": "fable-advisor",
       "source": "./",
-      "description": "Fable 5.1 architect-as-orchestrator: your session writes specs and verdicts, routing routine implementation to GPT-5.6 Luna and high-complexity one-offs to GPT-5.6 Sol (both via Codex CLI, effort chosen per task) — with a mandatory Fable 5.1 review before anything ships. Also ships the astra-operator browser/computer-use lane (GPT-6 Astra via Codex with headless Playwright Chrome) and its computer-use skill."
+      "description": "Fable 5.1 architect-as-orchestrator: your session writes specs and verdicts, routing routine implementation to GPT-5.6 Luna and high-complexity one-offs to GPT-5.6 Sol (both via Codex CLI, effort chosen per task) — with a mandatory Fable 5.1 review before anything ships. Also ships the astra-operator browser/computer-use lane (GPT-6 Astra via Codex with headless Playwright Chrome) and its computer-use skill, the read-only data-investigator lane (Claude Sonnet) for query runs that keep raw data out of the architect context, and the astra-advisor cross-vendor reviewer (GPT-6 Astra via Codex, read-only)."
     }
   ]
 }
