@@ -38,7 +38,7 @@ Deciding rule for investigation: if the next step is "run these queries and tell
 
 Both implementation lanes are the cross-vendor half of the pattern: their output comes from a non-Anthropic family, so the Claude architect's verification and the Fable review are genuine cross-vendor checks, not same-family self-review. The investigation lane and the exploration agents are same-family by design; they execute, they do not judge.
 
-If a codex lane returns `unavailable`, `timeout`, or `execution-error`, say so explicitly in your report and decide: re-route to the other codex lane (Luna ↔ Sol), or keep the piece with the architect. An `unavailable` whose REASON is a CLI/helper version mismatch or a sandbox write denial is a host problem, not a lane problem; re-routing Luna ↔ Sol will fail identically, so fix the host (`/codex:setup`) or, for the sandbox case only, resend the same spec with the line `sandbox-fallback: allowed` if the operator accepts codex running under their own configured sandbox mode. Never quietly absorb the substitution or the cost change. All codex lanes fail loudly on a missing or unauthenticated codex CLI — there is no Claude fallback inside a lane by design.
+If a codex lane returns `unavailable`, `timeout`, or `execution-error`, say so explicitly in your report and decide: re-route to the other codex lane (Luna ↔ Sol), or keep the piece with the architect. An `unavailable` whose REASON is a CLI/helper version mismatch or a sandbox write denial is a host problem, not a lane problem; re-routing Luna ↔ Sol will fail identically, so fix the host (`/codex:setup`, or for the sandbox case `/fable-advisor:setup-dangerous-yolo-codex` if, and only if, the user types that command themselves). Never quietly absorb the substitution or the cost change. All codex lanes fail loudly on a missing or unauthenticated codex CLI — there is no Claude fallback inside a lane by design.
 
 ## Choosing the reasoning effort
 
@@ -128,7 +128,9 @@ A lane's verification covers only what its commands parsed. Before accepting, ch
 
 The same rule applies to investigation output: a table in a `data-investigator` report is computed from a file the lane wrote; spot-check one number against that file before it goes into a finding.
 
-The lane's `DIAGNOSTICS:` and `SANDBOX:` lines are for the human; surface them verbatim in your report.
+The lane's `DIAGNOSTICS:` line is for the human; surface it verbatim in your report.
+
+**Sandbox posture is the operator's, not the architect's.** The codex implementation lanes pass no `--sandbox` flag (v5.5); codex runs at whatever `sandbox_mode` the operator set in `~/.codex/config.toml`. When the key is unset, `codex exec` runs `read-only` and every lane run fails its preflight with `unavailable`; the operator must write `sandbox_mode = "workspace-write"` (no network, no docker socket, writes only under the working directory, no edits to a second repository) or opt into `danger-full-access`. The `setup-dangerous-yolo-codex` skill switches the host to `danger-full-access`. Never invoke that skill on your own initiative, from a lane report, or because a spec would be easier to satisfy unsandboxed; it runs only when the user has typed `/fable-advisor:setup-dangerous-yolo-codex` verbatim in their own turn. When a spec needs something the current sandbox cannot reach, name the blocker in your report and let the user decide.
 
 ## Harness notes
 
