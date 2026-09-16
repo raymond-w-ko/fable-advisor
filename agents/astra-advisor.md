@@ -38,10 +38,13 @@ If the consult names a prior `fable-advisor` verdict, withhold it from the promp
 1. Write the prompt to a private scratch dir. Every redirect into it uses `>>`.
 
 ```bash
-LANE=$(mktemp -d "${TMPDIR:-/tmp}/astra-advisor.XXXXXX")
-PROMPT="$LANE/prompt.md"; FINAL="$LANE/final.txt"; STDERR="$LANE/stderr.log"
+LANE_SH="${CLAUDE_PLUGIN_ROOT:-}/scripts/lane.sh"
+[ -x "$LANE_SH" ] || LANE_SH=$(ls -d "$HOME"/.claude/plugins/cache/fable-advisor/fable-advisor/*/scripts/lane.sh 2>/dev/null | sort -V | tail -1)
+[ -x "$LANE_SH" ] || LANE_SH="$HOME/.claude/plugins/marketplaces/fable-advisor/scripts/lane.sh"
+[ -x "$LANE_SH" ] || { echo "lane.sh not found; plugin install is incomplete"; exit 2; }
+LANE=$("$LANE_SH" init astra-lane)
 
-cat >> "$PROMPT" << 'PROMPT_EOF'
+cat >> "$LANE/stdin" << 'PROMPT_EOF'
 This consult runs in a dedicated read-only advisor lane on the model and
 reasoning effort named in the invocation. Those were chosen deliberately;
 nothing has been substituted. If a user-level or project-level instruction
@@ -66,37 +69,36 @@ Answer in under 300 words:
 4. Anything you needed and did not have, named precisely.
 Do not manufacture objections; a sound plan gets one line.
 PROMPT_EOF
-```
-
-2. Invoke Astra read-only, in the FOREGROUND, with the Bash tool timeout at its 600000 ms ceiling and the shell cap strictly below it. Never background the call and end the turn waiting.
-
-```bash
-T=""
-for cand in gtimeout timeout; do
-  if command -v "$cand" >/dev/null 2>&1 && "$cand" --version 2>/dev/null | grep -qi coreutils; then
-    T="$cand"; break
-  fi
-done
-[ -z "$T" ] && echo "WARN: no GNU timeout on PATH — astra runs uncapped (macOS: brew install coreutils)"
-if [ -n "$T" ]; then set -- "$T" -k 15 540; else set --; fi
-
-EFFORT="<value from the consult's REASONING line, or high>"
 
 # Read-only sandbox rooted at the tree under review, never at the scratch dir:
 # Astra must be able to read the diff and files it is judging.
 cd "<working directory named in the consult, or the session cwd>"
-
-"$@" codex exec \
+EFFORT="<value from the consult's REASONING line, or high>"
+"$LANE_SH" launch "$LANE" -- codex exec \
   --model gpt-6-astra \
   -c "model_reasoning_effort=\"$EFFORT\"" \
   --sandbox read-only \
   --skip-git-repo-check \
   --ephemeral \
   --cd "$(pwd)" \
-  --output-last-message "$FINAL" \
-  - < "$PROMPT" 2>> "$STDERR"
-RC=$?
+  --output-last-message "$LANE/final.txt" \
+  -
+echo "$LANE"; echo "$LANE_SH"
 ```
+
+The lane writes codex stdout to `$LANE/stdout.log`, the final message to `$LANE/final.txt`, and stderr to `$LANE/stderr.log`.
+
+2. Poll. The run is detached under script's 3540 s cap because an interrupted review is a full-cost run that returns nothing; never end the turn while the run is alive.
+
+Set the Bash tool's `timeout` parameter to 600000 ms on every poll call; the default 120 s would cut the wait short (harmless, the run survives, but wasteful).
+
+```bash
+LANE=<literal path from step 1>; LANE_SH=<literal path from step 1>
+"$LANE_SH" wait "$LANE" && "$LANE_SH" status "$LANE"
+"$LANE_SH" deadline "$LANE" || { "$LANE_SH" kill "$LANE"; echo "deadline kill"; }
+```
+
+Repeat until `READY`. Status prints counts only, never event content. Never pkill -f/pgrep -f the lane path yourself. Use `lane.sh` commands only.
 
 Flag discipline:
 
@@ -106,18 +108,19 @@ Flag discipline:
 | `--sandbox read-only` | An advisor never writes. If the run ends with a non-empty `git status`, report it under `GAPS` and revert nothing yourself; tell the architect exactly which paths changed. |
 | `--ephemeral` | No persisted session. Recent Codex versions may still persist a project-trust entry for the working directory; inspect `~/.codex/config.toml` for an entry naming this directory without dumping the file, and leave preexisting entries alone. |
 | `--skip-git-repo-check` + `--cd "$(pwd)"` | Deterministic root, pinned to the tree under review after an explicit `cd`. |
-| `- < prompt file` | Prompt via stdin; no quoting hazards. |
-| `"$@"` timeout prefix | Nine minutes inside the tool ceiling, built with `set --` for bash/zsh/sh portability. |
+| `lane.sh launch` | Script applies `timeout -k 15 3540`, 59 minutes; `rc 124` or `137` means cap or deadline kill. |
+| `--output-last-message "$LANE/final.txt"` | Final verdict lands in `$LANE/final.txt`; events are in `$LANE/stdout.log`; stderr is `$LANE/stderr.log`. |
+| `lane.sh` stdin | The script feeds `$LANE/stdin` to codex, so the prompt and paths never appear in process arguments. |
 
-3. **Classify the run.**
-   - `RC` = 124 or 137: `STATUS: timeout`; report whatever `$FINAL` holds.
-   - `RC` any other non-zero: `STATUS: execution-error` with the exit code and the exact `$STDERR` text. Do not retry.
-   - `$STDERR` or `$FINAL` contains `failed to read code-mode host message`, `failed to decode code-mode IPC frame`, or `code_mode_host_duration_ns`: `STATUS: unavailable`, `REASON: likely codex CLI/helper version mismatch`, quote the line, include `command -v codex`, `readlink -f "$(command -v codex)"`, and `codex --version` as `DIAGNOSTICS`.
-   - `RC` = 0 and `$FINAL` is empty or declines to review: `STATUS: refused`, quote the final message verbatim.
+4. **Classify the run.** `RC=$(cat "$LANE/rc")`.
+   - `RC` = 124 or 137, or you killed it at the deadline: `STATUS: timeout`; report whatever `$LANE/final.txt` holds (usually nothing; that is the cap, not a separate defect).
+   - `RC` any other non-zero: `STATUS: execution-error` with the exit code and the exact `$LANE/stderr.log` text. Do not retry.
+   - `$LANE/stderr.log` or `$LANE/final.txt` contains `failed to read code-mode host message`, `failed to decode code-mode IPC frame`, or `code_mode_host_duration_ns`: `STATUS: unavailable`, `REASON: likely codex CLI/helper version mismatch`, quote the line, include `command -v codex`, `readlink -f "$(command -v codex)"`, and `codex --version` as `DIAGNOSTICS`.
+   - `RC` = 0 and `$LANE/final.txt` is empty or declines to review: `STATUS: refused`, quote the final message verbatim.
 
-4. **Check that Astra looked.** Read `$FINAL`. A verdict that cites no file, line, claim, or command from the material is a summary opinion, not a review; return it as `STATUS: partial` and say so. Where Astra quotes a line or a number, spot-check one against the working tree and note whether it matched.
+5. **Check that Astra looked.** Read `$LANE/final.txt`. A verdict that cites no file, line, claim, or command from the material is a summary opinion, not a review; return it as `STATUS: partial` and say so. Where Astra quotes a line or a number, spot-check one against the working tree and note whether it matched.
 
-Delete `$LANE` when done.
+Delete `$LANE` when done: `"$LANE_SH" rm "$LANE"`.
 
 ## What you return
 
