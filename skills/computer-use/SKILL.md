@@ -24,7 +24,7 @@ Do not route here for checked-in deterministic browser suites: those run their o
 |---|---|---|---|
 | Browser / computer use | GPT-6 Astra (effort `medium` by default) | `astra-operator` agent | Standalone `codex exec` with the `playwright_chrome` MCP server enabled for that run only. Headless, isolated context, no desktop session needed. Requires the codex CLI and a configured browser server. |
 
-The lane never substitutes. If it returns `unavailable`, the fix is on the host (codex login, `playwright_chrome` config, installed browser), not a different model. A host-provided preview browser (an IDE or agent-host tab you can drive from the session) is an alternative only when the user explicitly chooses it; it runs on whatever client is connected, its `localhost` is not necessarily the shell host, and its evidence lives in a different place. Say which workflow ran.
+The lane never substitutes. If it returns `unavailable`, the fix is on the host (codex login, `playwright_chrome` config, installed browser), not a different model; for the `playwright_chrome` config and browser, run the `playwright-mcp-setup` skill. A host-provided preview browser (an IDE or agent-host tab you can drive from the session) is an alternative only when the user explicitly chooses it; it runs on whatever client is connected, its `localhost` is not necessarily the shell host, and its evidence lives in a different place. Say which workflow ran.
 
 ## Resolve the application first — architect work
 
