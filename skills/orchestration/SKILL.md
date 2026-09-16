@@ -60,22 +60,22 @@ The architect's own effort and the Fable advisor's come from the session (`/effo
 
 Plan the split before the first dispatch, not after the first timeout.
 
-- A codex lane call is capped at 540 s of wall clock by the lane's own timeout (the Bash tool ceiling is 600 s). Luna at `high` on a well-specified change touching a handful of files typically lands in 5 to 10 minutes including its own verification run; Luna at `max` and Sol at `xhigh` and above routinely need the whole cap. Sol at `max`/`ultra` uses a bounded detached launch and polls up to 30 minutes.
+- Every codex lane launches its run detached under a 3540 s cap (59 minutes) and polls it in bounded foreground calls, because the Bash tool ceiling is 600 s per call and an interrupted run is the worst outcome: the edits land, codex's own verification and final message are lost, and the architect re-verifies from scratch. The mechanics live in the plugin's `scripts/lane.sh` and are covered by `tests/lane-smoke.sh`. Luna at `high` on a well-specified change touching a handful of files typically lands in 5 to 15 minutes including its own verification run; a spec touching a dozen files plus tests and docs has taken more than 10, and Luna at `max` and Sol at `xhigh` and above routinely need 15 to 30. Do not shorten the cap to save wall clock. A lane report of `timeout` with a finished diff is possible when the host has no GNU timeout, when something hung, or when a genuinely slow verification step outran the cap; treat the diff as untrusted, run the verification yourself, and then decide between keep and resend.
 - Split specs so each lane call owns one package or one coherent change with one verification command. A spec whose verification runs a whole monorepo's tests will time out on the verification, not the change; scope the verification to the package and rerun the wider suite yourself.
 - A lane report costs the architect a few hundred tokens to read; a lane's raw diff can cost thousands. Read the diff once, judge, and do not re-read it on later turns.
 - An `Explore` sweep of a service returns in 3 to 8 minutes and replaces dozens of architect-side file reads. A `data-investigator` run is bounded by the slowest query; put a statement timeout in the runner so a bad query fails in minutes, not the whole lane.
 - A `fable-advisor` consult costs cents and returns in under a minute for a diff of a few hundred lines. A second pass on the same advisor (see below) costs less than the first because its context is retained.
-- An `astra-advisor` consult is a full codex run: budget the same 5 to 10 minutes as a Luna task.
+- An `astra-advisor` consult is a full codex run: budget the same 5 to 15 minutes as a Luna task, more for a diff of several hundred lines.
 
 ## The spec contract
 
 Implementers share none of your conversation context. Every delegation prompt carries all six parts:
 
 1. **Objective** — what to build or change, one paragraph
-2. **Files** — exact paths to create or modify, and the working directory when it is not the session cwd (the lane `cd`s there before launching codex). Before writing this part, list what already exists at those paths and next to them, including test files beside the sources (`ls`, a glob, or the exploration agent). "Add" a file that exists and the lane will either clobber it or quietly merge; say "modify" and name what must survive.
+2. **Files** — exact paths to create or modify, and the working directory when it is not the session cwd (the lane `cd`s there before launching codex). Before writing this part, list what already exists at those paths and next to them, including test files beside the sources (`ls`, a glob, or the exploration agent). "Add" a file that exists and the lane will either clobber it or quietly merge; say "modify" and name what must survive. When other lanes or the architect have uncommitted work in the same tree, add one line, `Other work in flight: <paths>`, so the lane lists those paths uninspected instead of reporting them as unauthorized.
 3. **Interfaces** — signatures, types, or API shapes the code must match
 4. **Constraints** — project conventions, things not to touch
-5. **Verification** — the command(s) that prove it works, scoped to what the change can affect
+5. **Verification** — the command(s) that prove it works, scoped to what the change can affect, plus, for every file the spec touches, at least one command that actually parses or compiles it. Test targets routinely build a subset (a test build that skips namespaces, one Go package, one crate, one jest project, one tsc project reference); when the test command's build does not include a touched file, name the command that does (the package's full compile, a typecheck of the owning project, `go build ./...`, `cargo check`, a byte-compile or lint pass) so a syntax error in an untested file cannot pass. The lane reports which check covered which file
 6. **Reasoning** — one line, `REASONING: <effort>`, chosen from the table above
 
 A spec you can't finish writing is a signal the decision isn't made yet — that's architect work, not a reason to hand the ambiguity to a cheaper model.
@@ -85,6 +85,8 @@ The investigation spec is the five-part variant the `data-investigator` agent do
 ## Parallelism
 
 Independent specs (no shared files, no ordering dependency) launch as parallel agents in a single message. Sequential chains and single-file surgery stay serial. Investigation runs and exploration sweeps are independent of implementation and can run alongside it. For high-stakes work, run `codex-implementer` and `sol-implementer` on the same spec and let the architect pick the stronger diff — two capability tiers, one judged result.
+
+Parallel lanes share one working tree, so each sees the others' uncommitted files. Put the `Other work in flight` line in each spec and expect each lane to report only its own diff, with the rest listed on its `OTHER WORK` line. A lane report that calls another lane's files, or the architect's, unauthorized is noise, not a finding; do not act on it.
 
 ## Commitment boundaries and the reviews
 
@@ -120,6 +122,8 @@ Reports are claims, not evidence. Before accepting any lane's work: read the dif
 
 **Lane objections are hypotheses, not orders.** A `STATUS: contested` report means the lane read the spec against the tree and found defects it lists in `OBJECTIONS`; it did no work. Check each objection against the tree before acting — the routine lane runs a weaker model than the architect and will sometimes contest a spec that is fine — then either correct the spec or answer the objection with the evidence that refutes it, and resend to the same lane with `SendMessage` so it keeps the context of the first pass. Never answer a contest with "use your judgment", never rewrite the spec to whatever the lane guessed you meant, and never do the work yourself because the lane pushed back. A spec contested on three corrected versions is a decision the architect has not actually made — take it to `fable-advisor` before writing a fourth version.
 
+A lane's verification covers only what its commands parsed. Before accepting, check that every touched file went through a compile, typecheck, or lint the lane actually ran; when the test build skips a file, run the covering check yourself. Observed 2026-09-15: a ClojureScript test build that never compiled the portal namespaces passed with an unbalanced paren in one of them; the linter caught it.
+
 The same rule applies to investigation output: a table in a `data-investigator` report is computed from a file the lane wrote; spot-check one number against that file before it goes into a finding.
 
 The lane's `DIAGNOSTICS:` and `SANDBOX:` lines are for the human; surface them verbatim in your report.
@@ -131,6 +135,6 @@ Things about the Claude Code harness that cost time when learned mid-task:
 - **Waiting.** Chained `sleep` in a Bash call is blocked. To wait on CI, run `gh run watch <id> --exit-status` in a background Bash call and read its output when notified, or use an `until <check>; do sleep 20; done` loop in one background call. Poll one exact run id, not `gh run list` in a loop.
 - **Working directory drift.** The session cwd can change after a `cd` inside a command, and the harness reports it as an environment update. Use absolute paths in every command that matters, and re-`cd` at the start of scripts.
 - **No artifact tool.** The session cannot create shareable claude.ai artifacts. Shareable output means files in the repository or a temp directory, a static HTML site the user hosts, or a markdown file with a rendering prompt at the top that the user pastes into claude.ai.
-- **Background agents notify once.** A backgrounded agent's result arrives as a task notification; do not poll it, and do not predict its result before the notification arrives.
-- **Subagents cannot receive notifications.** A lane that backgrounds codex and waits will never be woken; the lanes run codex in the foreground with a cap for that reason.
+- **Background agents notify once.** A backgrounded agent's result, and a lane's reply to a `SendMessage` resume, arrive as task notifications; there is no blocking wait. Do not poll, and do not predict the result before the notification arrives. Never call `TaskOutput` on an agent task: its output file is the agent's whole JSONL transcript and it lands in your context (observed 2026-09-15). If you want a timer while a lane works, run `sleep N` in a background Bash call and let its completion wake you, or do other work.
+- **Subagents cannot receive notifications.** A lane that backgrounds codex and ends its turn will never be woken; the lanes launch codex detached through `scripts/lane.sh` and poll it in bounded foreground calls for that reason.
 - **Temp data.** Keep investigation output under an ignored directory in the repository (`tmp/<investigation>/`) so it survives the session, stays out of git, and can be handed to a rendering lane later.
