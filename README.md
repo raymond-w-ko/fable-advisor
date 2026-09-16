@@ -74,6 +74,12 @@ implementation, and verify the evidence before you call it done.
 
 The architect writes the spec, picks the lane and effort (rate limiting touches concurrency — a good case for `sol-implementer` at `max`, or for racing it against `codex-implementer` and picking the stronger diff), reads the diff and verification evidence when the report comes back, sends the finished work to `fable-advisor` for the final review, and only then reports done.
 
+## Lane mechanics
+
+All Codex-backed lanes share `scripts/lane.sh`: detached launch under a 3540 s cap, bounded wait, deadline kill, credential `splice-secret`, and `scrub`.
+Run `bash tests/lane-smoke.sh` to exercise it with a dummy command in seconds.
+Agents resolve it through `CLAUDE_PLUGIN_ROOT`, with a fallback to the plugin cache.
+
 To make the doctrine always-on, add one line to your project's `CLAUDE.md`:
 
 ```
