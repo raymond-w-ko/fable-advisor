@@ -1,7 +1,7 @@
 {
   "name": "fable-advisor",
   "metadata": {
-    "description": "Model-routing patterns for Claude Code: Fable 5.1 architect-as-orchestrator with a GPT-5.6 Luna routine lane pinned at max effort, a GPT-5.6 Sol high-complexity lane at per-task reasoning effort, and a Fable 5.1 end-of-deliverable reviewer. Also ships the astra-operator browser/computer-use lane (GPT-6 Astra via Codex with headless Playwright Chrome) and its computer-use skill, the read-only data-investigator lane (Claude Sonnet) for query runs that keep raw data out of the architect context, and the astra-advisor cross-vendor reviewer (GPT-6 Astra via Codex, read-only)."
+    "description": "Model-routing patterns for Claude Code: Fable 5.1 architect-as-orchestrator with a GPT-5.6 Luna routine lane pinned at max effort, a GPT-5.6 Sol high-complexity lane at per-task reasoning effort, and a Fable 5.1 end-of-deliverable reviewer. Also ships the astra-operator browser/computer-use lane (GPT-6 Astra via Codex with headless Playwright Chrome) and its computer-use skill, the read-only data-investigator lane (Claude Sonnet) for query runs that keep raw data out of the architect context, and the astra-advisor cross-vendor reviewer (GPT-6 Astra via Codex, read-only). Implementation lanes run at the operator's own Codex sandbox_mode; the setup-dangerous-yolo-codex skill (user-typed command only) switches a host to danger-full-access."
   },
   "owner": {
     "name": "Dan McAteer",
