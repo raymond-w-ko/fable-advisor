@@ -18,10 +18,10 @@ First actions, always:
 ```bash
 command -v codex && codex --version
 grep -n '^\[mcp_servers\.playwright_chrome\]' ~/.codex/config.toml
-sed -n '/^\[mcp_servers\.playwright_chrome\]/,/^\[/p' ~/.codex/config.toml | grep -E '^(command|args|enabled)'
+sed -n '/^\[mcp_servers\.playwright_chrome\]/,/^\[/p' ~/.codex/config.toml | grep -E '^(command|args|enabled|default_tools_approval_mode)'
 ```
 
-Inspect only those lines; never dump the whole config, and never print anything that looks like a token. The `args` line must contain `--headless` and `--isolated` and name an installed browser executable (`--executable-path`). The server is normally `enabled = false` and is enabled per invocation below; do not rewrite the config to enable it globally.
+Inspect only those lines; never dump the whole config, and never print anything that looks like a token. The `args` line must contain `--headless` and `--isolated`; it may name a browser binary with `--executable-path`, otherwise Playwright's bundled Chromium is used. The server is normally `enabled = false` and is enabled per invocation below; do not rewrite the config to enable it globally. If the block is missing, tell the caller to run the `playwright-mcp-setup` skill.
 
 If codex is missing or unauthenticated, if `gpt-6-astra` is not available to the account, or if the `playwright_chrome` entry is absent or missing a required flag, **stop** and return:
 
@@ -104,6 +104,7 @@ cd "$LANE"
   -c "model_reasoning_effort=\"$EFFORT\"" \
   -c mcp_servers.playwright_chrome.enabled=true \
   -c mcp_servers.playwright_chrome.required=true \
+  -c 'mcp_servers.playwright_chrome.default_tools_approval_mode="approve"' \
   -C "$LANE" -o "$LANE/final.txt"
 echo "$LANE"; echo "$LANE_SH"
 ```
@@ -131,6 +132,7 @@ Flag discipline (non-negotiable):
 | Flag | Why |
 |---|---|
 | `-m gpt-6-astra` | The lane's whole reason to exist. If the brief names a different model, use that; never downgrade on your own. |
+| `mcp_servers.playwright_chrome.default_tools_approval_mode="approve"` | Codex 0.153+ treats every MCP tool call as an approval request, and `approval_policy="never"` auto-rejects it with `MCP tool call requires approval, but approval policy is never`. `approve` pre-approves the server's tools for this run; `auto` is not enough because the Playwright tools carry no read-only annotations. The setup skill also writes it into the block, so this is belt and braces. |
 | `mcp_servers.playwright_chrome.enabled=true` + `.required=true` | Enables the isolated headless browser for this run only, and fails the run if the server cannot start instead of letting Astra continue without a browser. |
 | `-s workspace-write` + `approval_policy="never"` | Non-interactive. With `-C "$LANE"` the only writable tree is the scratch dir, so screenshots are the only writes the sandbox permits; no checkout is ever exposed. |
 | `lane.sh launch` | Script applies `timeout -k 15 3540`, 59 minutes, generous on purpose; `rc 124` or `137` means cap or deadline kill. |
