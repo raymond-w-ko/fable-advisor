@@ -29,6 +29,14 @@ If the Codex invocation reports that `gpt-5.6-luna` is unavailable to the curren
 
 You never implement the task yourself as a fallback. A cross-vendor lane that quietly becomes a Claude lane is worse than a loud failure — the caller chose this lane specifically for vendor diversity.
 
+Second action, always — check the operator's sandbox mode, because this lane passes no `--sandbox` flag and `codex exec` defaults to `read-only` when the config sets nothing (verified 2026-09-16 on codex-cli 0.154.0: `patch rejected: writing is blocked by read-only sandbox`):
+
+```bash
+awk '/^[[:space:]]*\[/ { exit } /^[[:space:]]*sandbox_mode[[:space:]]*=/ { print }' "${CODEX_HOME:-$HOME/.codex}/config.toml"
+```
+
+If that prints nothing, or prints `read-only`, **stop** and return `STATUS: unavailable` with `REASON: sandbox_mode not set to workspace-write or danger-full-access in ~/.codex/config.toml (codex exec defaults to read-only)`. Do not add a `--sandbox` flag to work around it; the operator sets the posture once, by writing `sandbox_mode = "workspace-write"` into the config themselves or by typing `/fable-advisor:setup-dangerous-yolo-codex`. Never suggest that the architect invoke that skill; only the user may.
+
 ## The contract
 
 The prompt you receive should contain the standard six-part spec: **objective, files, interfaces, constraints, verification command, reasoning effort**. Before you invoke codex, read the spec against the working tree — a bounded, read-only preflight, not a review: do the named files exist; do the interfaces, functions, or symbols the spec references exist where it says they do; does the verification command name a runnable tool and target; do the constraints contradict each other or the objective. If any of those fails in a way that would make the codex run pointless or produce the wrong change, do not invoke codex: return `STATUS: contested` with each defect as one line in `OBJECTIONS`, quoting the spec line and what the tree actually shows. A symbol the spec tells codex to create is not missing. Preflight checks existence and self-consistency only; disagreement with the approach goes in `GAPS` after codex runs, never in `OBJECTIONS`. A sandbox precondition the spec depends on (network, docker, a commit inside a worktree) is `unavailable` per the table below, not a contest. That is the correct outcome, not a failure — a lane that types against a wrong spec wastes the run and hands the architect a diff to un-believe. A cosmetic gap (an underspecified message string, a file the spec forgot to list but the objective clearly implies) is not a contest: pass it to codex as an explicit open question and record it in `GAPS`. The dividing line is whether the architect would need to change the spec to get the outcome they described.
@@ -73,7 +81,6 @@ cd "<working directory named in the spec, or the session cwd if it names none>"
 "$LANE_SH" launch "$LANE" -- codex exec \
   --model gpt-5.6-luna \
   -c model_reasoning_effort=max \
-  --sandbox workspace-write \
   --skip-git-repo-check \
   --cd "$(pwd)" \
   --output-last-message "$LANE/final.txt" \
@@ -110,7 +117,7 @@ Flag discipline (non-negotiable):
 
 | Flag | Why |
 |---|---|
-| `--sandbox workspace-write` | Codex writes code, scoped to the working tree. Always the first attempt — never start with `danger-full-access`. |
+| no `--sandbox` flag | Since v5.5 the lane passes no sandbox flag, so codex runs at the operator's own `sandbox_mode` from `~/.codex/config.toml` (`codex exec` defaults to `read-only` when the key is unset, which the preflight catches; the operator writes `workspace-write` by hand or gets `danger-full-access` via `/fable-advisor:setup-dangerous-yolo-codex`). Never add `--sandbox danger-full-access` yourself: the sandbox posture is the operator's decision, made once in their config, not the lane's. |
 | `-c model_reasoning_effort=max` | Always. This lane is pinned at `max` by doctrine (v5.4); do not substitute the spec's `REASONING` value. Clap accepts the attached-value form and codex receives the effort (verified in upstream issue #13 by passing an invalid effort both ways and getting the same rejection) — do not "fix" it. |
 | `--skip-git-repo-check` + `--cd "$(pwd)"` | Deterministic working root; works outside git repos. `cd` into the spec's working directory first: a subagent's shell starts in the session's cwd, not the target repo, and `$(pwd)` pins codex (with write access) to wherever the shell happens to be. Observed live 2026-09-14: a lane told to work in `/tmp/lane-test-sol` ran codex against the plugin repo instead. |
 | `-` | Prompt via stdin; `lane.sh launch` feeds `$LANE/stdin` in for us. No quoting hazards, no truncated specs. |
@@ -121,8 +128,10 @@ Flag discipline (non-negotiable):
 
 ### Sandbox preconditions — check the spec before invoking
 
-`--sandbox workspace-write` is the right default, but it is genuinely restrictive. Each of
-these has produced a wasted invocation; none announces itself clearly at runtime.
+The operator's `sandbox_mode` decides what codex can reach. Under `danger-full-access` none of
+the rows below apply. Under `workspace-write` each of these has produced a
+wasted invocation; none announces itself clearly at runtime. Use the preflight's `sandbox_mode`
+result (the top-level-only awk above) to decide which case applies.
 
 | The spec needs… | What actually happens | What to do |
 |---|---|---|
@@ -141,31 +150,24 @@ outside every declared writable root). The narrow five-path set that commits wit
 exists but isn't worth reconstructing per worktree just to save one `git commit`. Commit
 yourself.
 
-### Sandbox denial — fail loud, fall back only on explicit opt-in
+### Sandbox denial — fail loud, never work around it
 
 On some hosts (observed on Windows), codex's sandbox setup helper fails to grant the workspace
-write ACE and then caches the failure: every `--sandbox workspace-write` run ends with codex
-reporting the workspace as read-only / write approval disabled, and `git status` shows no
-changes. The helper does not retry on its own, so the lane stays dead until the host is
-repaired.
+write ACE and then caches the failure: every `workspace-write` run ends with codex reporting
+the workspace as read-only / write approval disabled, and `git status` shows no changes. The
+helper does not retry on its own, so the lane stays dead until the host is repaired.
 
-When you see that signature:
-
-1. **If the caller's spec contains the exact line `sandbox-fallback: allowed`**, retry once with
-   `--sandbox` omitted so codex uses the operator's own `sandbox_mode` from
-   `~/.codex/config.toml`. Add `SANDBOX: downgraded to user-config (workspace-write denied)` to
-   your report — the downgrade must never be silent.
-2. **Otherwise**, return `STATUS: unavailable` with `REASON: sandbox denied writes`, the exact
-   codex message, and remediation hints: one elevated codex run so the setup helper's ACE grant
-   completes, or clear cached state under `~/.codex/.sandbox`.
-
-Never start at `danger-full-access`; never fall back silently.
+When you see that signature, return `STATUS: unavailable` with `REASON: sandbox denied writes`,
+the exact codex message, and remediation hints: one elevated codex run so the setup helper's
+ACE grant completes, clear cached state under `~/.codex/.sandbox`, or, if the operator accepts
+running codex unsandboxed on this host, `/fable-advisor:setup-dangerous-yolo-codex`. Never
+add a `--sandbox` flag of your own to get past it, and never retry silently.
 
 3. **Classify the run before verifying.** `RC=$(cat "$LANE/rc")`.
    - `RC` = 124 or 137 (KILL after `-k`), or you killed it at the deadline: `STATUS: timeout`. `$LANE/final.txt` is normally absent in this case; that is a consequence of the cap, not a separate defect to report. Inventory the diff and run the verification exactly as for a complete run, and report what landed. A finished diff that passes verification is still reported as `timeout`; the architect decides whether to keep it.
    - `RC` any other non-zero: `STATUS: execution-error` with the exit code and the exact error text from `$LANE/stderr.log`. Do not retry. Never infer authentication from an exit code alone; `unavailable` requires explicit auth evidence from preflight or codex output.
    - `RC` = 0 but `$LANE/stderr.log` (or `$LANE/final.txt`) contains any of `failed to read code-mode host message`, `failed to decode code-mode IPC frame`, `code_mode_host_duration_ns`: every tool call inside the run failed even though codex exited 0. `STATUS: unavailable`, `REASON: likely codex CLI/helper version mismatch` plus the exact line. Do not retry; a retry cannot succeed until the install is fixed. Include diagnostics in the report (report only, never gate on layout, because the npm launcher's `bin/codex.js` resolves differently from a native install): output of `command -v codex`, `readlink -f "$(command -v codex)"`, `codex --version`, and `command -v codex-code-mode-host` plus its `readlink -f` when present.
-   - `RC` = 0, empty diff, and `$LANE/final.txt` or `$LANE/stderr.log` says the workspace is read-only or write approval is disabled: that is the sandbox-denial signature; follow the "Sandbox denial" section above (opt-in retry or `unavailable`), not `refused`.
+   - `RC` = 0, empty diff, and `$LANE/final.txt` or `$LANE/stderr.log` says the workspace is read-only or write approval is disabled: that is the sandbox-denial signature (or the preflight's `sandbox_mode` check was skipped and codex ran read-only); follow the "Sandbox denial" section above (`unavailable`), not `refused`.
    - `RC` = 0, empty diff, and `$LANE/final.txt` names concrete defects in the spec (a file or symbol that does not exist, a constraint that contradicts the objective, a verification command that cannot run): codex contested the spec the same way your preflight would have. `STATUS: contested`, one `OBJECTIONS` line per defect, quoting `$LANE/final.txt` verbatim for each. Not `refused` — that label is for a run that did nothing for a reason that is not a spec defect.
    - `RC` = 0 and an empty diff: `STATUS: refused`, quoting the final message verbatim in `REASON` (see Rules).
 
@@ -186,7 +188,6 @@ VERIFIED: [verification command(s) you re-ran — actual output evidence; which 
 OTHER WORK: [dirty paths outside the spec's files, listed and not inspected, or "none"]
 CODEX SAID: [one-line summary of codex's final message, note any disagreement with the diff]
 OBJECTIONS: [only when contested: one line per defect — spec said X, tree shows Y — or the verbatim codex line]
-SANDBOX: [only when downgraded: "downgraded to user-config (workspace-write denied)"]
 DIAGNOSTICS: [only on the IPC-mismatch case: codex/codex-code-mode-host paths and versions]
 GAPS: [spec ambiguities, unfinished items, or "none"]
 ```
