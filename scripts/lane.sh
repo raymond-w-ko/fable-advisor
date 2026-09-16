@@ -6,6 +6,13 @@ DEADLINE=3600
 KILL_GRACE=15
 # CAP is generous on purpose because an interrupted codex run loses its verification and final message.
 
+# Git Bash / MSYS2 on Windows: no pgrep, no POSIX file modes, and paths that
+# other tools only understand in Windows form.
+case $(uname -s 2>/dev/null) in
+    MINGW*|MSYS*|CYGWIN*) IS_MSYS=1 ;;
+    *) IS_MSYS=0 ;;
+esac
+
 usage() {
     printf '%s\n' \
         'Usage: scripts/lane.sh <subcommand> [args]' \
@@ -69,12 +76,23 @@ line_count() {
     fi
 }
 
+find_children() {
+    if command -v pgrep >/dev/null 2>&1; then
+        pgrep -P "$1" 2>/dev/null || true
+    else
+        # MSYS ps has no -P but lists every process, native children included,
+        # as PID PPID PGID WINPID ... rows. Stopped rows carry a leading status
+        # letter that shifts the columns; the numeric guard skips them.
+        ps 2>/dev/null | awk -v parent="$1" '$1 ~ /^[0-9]+$/ && $2 == parent { print $1 }'
+    fi
+}
+
 collect_descendants() {
     local parent=$1
     local children child
 
     # Walk parent-child PIDs; command-line matching can kill this shell.
-    children=$(pgrep -P "$parent" 2>/dev/null || true)
+    children=$(find_children "$parent")
     while IFS= read -r child; do
         [ -n "$child" ] || continue
         DESCENDANTS+=("$child")
@@ -82,6 +100,121 @@ collect_descendants() {
     done <<EOF
 $children
 EOF
+}
+
+# Native grandchildren (codex -> MCP servers -> Chrome) never appear in MSYS
+# ps, so on Windows also walk the Win32 process tree from each MSYS WINPID.
+# Win32 keeps a dead parent's pid on its orphans, and pids get reused, so a
+# child counts only when it started after its parent, each pid is visited
+# once, and WIN_DESCENDANTS holds "pid creation-date" pairs that kill_win_pids
+# re-checks before terminating anything.
+win_snapshot() {
+    powershell -NoProfile -Command \
+        'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId) $($_.CreationDate.ToString("yyyyMMddHHmmss.ffffff"))" }' \
+        2>/dev/null | tr -d '\r'
+}
+
+collect_win_descendants() {
+    [ "$IS_MSYS" -eq 1 ] || return 0
+    local winpid snapshot
+    snapshot=$(win_snapshot) || return 0
+    WIN_VISITED=" "
+    for winpid in "$@"; do
+        [ -n "$winpid" ] || continue
+        walk_win_tree "$winpid" "$snapshot"
+    done
+}
+
+walk_win_tree() {
+    local parent=$1 snapshot=$2 row child created
+    case "$WIN_VISITED" in
+        *" $parent "*) return 0 ;;
+    esac
+    WIN_VISITED="$WIN_VISITED$parent "
+    while IFS= read -r row; do
+        [ -n "$row" ] || continue
+        child=${row%% *}
+        created=${row#* }
+        WIN_DESCENDANTS+=("$child $created")
+        walk_win_tree "$child" "$snapshot"
+    done <<EOF
+$(printf '%s\n' "$snapshot" | awk -v p="$parent" '
+    $1 == p { pc = $3 }
+    { rows[NR] = $0 }
+    END { for (i = 1; i <= NR; i++) { split(rows[i], f, " "); if (f[2] == p && f[1] != p && (pc == "" || f[3] >= pc)) print f[1] " " f[3] } }')
+EOF
+}
+
+kill_win_pids() {
+    [ "$#" -gt 0 ] || return 0
+    local snapshot entry pid created
+    snapshot=$(win_snapshot) || return 0
+    for entry in "$@"; do
+        pid=${entry%% *}
+        created=${entry#* }
+        # Skip when the pid now belongs to a different (newer) process.
+        printf '%s\n' "$snapshot" | awk -v p="$pid" -v c="$created" '$1 == p && $3 == c { found = 1 } END { exit !found }' || continue
+        taskkill //F //PID "$pid" >/dev/null 2>&1 || true
+    done
+}
+
+msys_winpids() {
+    [ "$IS_MSYS" -eq 1 ] || return 0
+    local pid
+    for pid in "$@"; do
+        ps 2>/dev/null | awk -v p="$pid" '$1 ~ /^[0-9]+$/ && $1 == p { print $4 }'
+    done
+}
+
+# On Windows there is no POSIX mode; the equivalent of 0600 is an ACL that
+# names only the owner, SYSTEM, and Administrators. Anything inherited from
+# %TEMP% (for example a sandbox group) fails the check.
+secret_perms_ok() {
+    local file=$1 mode line principal owner winpath acl entries=0
+    if [ "$IS_MSYS" -eq 1 ]; then
+        owner=$(whoami 2>/dev/null | tr '[:upper:]' '[:lower:]')
+        winpath=$(cygpath -w -- "$file")
+        acl=$(icacls "$winpath" 2>/dev/null | tr -d '\r') || return 2
+        while IFS= read -r line; do
+            line=${line#"$winpath"}
+            line=${line#"${line%%[! ]*}"}
+            case "$line" in
+                *':('*) ;;
+                *) continue ;;
+            esac
+            entries=$((entries + 1))
+            principal=$(printf '%s' "${line%%:(*}" | tr '[:upper:]' '[:lower:]')
+            case "$principal" in
+                "$owner"|*"\\$owner"|'nt authority\system'|'builtin\administrators') ;;
+                *) return 1 ;;
+            esac
+        done <<EOF
+$acl
+EOF
+        [ "$entries" -gt 0 ] || return 2
+        return 0
+    fi
+    if mode=$(stat -c %a "$file" 2>/dev/null); then
+        :
+    elif mode=$(stat -f %Lp "$file" 2>/dev/null); then
+        :
+    else
+        return 2
+    fi
+    case "$mode" in
+        600|400) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Print a path in the form the host's other tools accept: mixed C:/... on
+# Windows (bash and native tools both read it), unchanged elsewhere.
+host_path() {
+    if [ "$IS_MSYS" -eq 1 ]; then
+        cygpath -m -- "$1"
+    else
+        printf '%s\n' "$1"
+    fi
 }
 
 secure_delete() {
@@ -108,7 +241,8 @@ cmd_init() {
     lane=$(mktemp -d "${TMPDIR:-/tmp}/$1.XXXXXX") || fail 'mktemp failed'
     mkdir -p "$lane/shots"
     : >> "$lane/.lane-marker"
-    printf '%s\n' "$lane"
+    # umask is a no-op on Windows; %TEMP% is already owner-scoped by ACL.
+    host_path "$lane"
 }
 
 cmd_launch() {
@@ -146,7 +280,7 @@ cmd_launch() {
     printf '%s\n' "$pid" >> "$lane/pid"
     printf '%s\n' "$timeout_bin" >> "$lane/timeout-bin"
     date +%s >> "$lane/started"
-    printf '%s\n' "$lane"
+    host_path "$lane"
 }
 
 cmd_wait() {
@@ -221,6 +355,10 @@ cmd_kill() {
     # GNU timeout calls setpgid, so its process group differs from wrapper's group.
     DESCENDANTS=()
     collect_descendants "$pid"
+    # Snapshot the native tree now: once the MSYS parents die, orphaned
+    # native processes keep a stale parent id and can no longer be walked.
+    WIN_DESCENDANTS=()
+    collect_win_descendants $(msys_winpids "$pid" ${DESCENDANTS[@]+"${DESCENDANTS[@]}"})
     kill -TERM -- "-$pid" 2>/dev/null || true
     for child in ${DESCENDANTS[@]+"${DESCENDANTS[@]}"}; do
         kill -TERM "$child" 2>/dev/null || true
@@ -246,6 +384,7 @@ cmd_kill() {
         kill -KILL "$child" 2>/dev/null || true
         kill -KILL -- "-$child" 2>/dev/null || true
     done
+    kill_win_pids ${WIN_DESCENDANTS[@]+"${WIN_DESCENDANTS[@]}"}
     if [ ! -f "$lane/rc" ]; then
         printf '137\n' >> "$lane/rc"
     fi
@@ -272,21 +411,19 @@ cmd_splice_secret() {
     [ "$#" -eq 2 ] || fail 'splice-secret requires lane directory and secret file'
     local lane=$1
     local secret=$2
-    local mode secret_lines content_lines blank_lines
+    local secret_lines content_lines blank_lines
     require_lane "$lane"
     [ -f "$secret" ] || fail "secret file missing: $secret"
     [ -s "$secret" ] || fail 'secret file empty'
-    if mode=$(stat -c %a "$secret" 2>/dev/null); then
+    if secret_perms_ok "$secret"; then
         :
-    elif mode=$(stat -f %Lp "$secret" 2>/dev/null); then
-        :
-    else
+    elif [ "$?" -eq 2 ]; then
         fail 'cannot inspect secret file permissions'
+    elif [ "$IS_MSYS" -eq 1 ]; then
+        fail 'secret file ACL must grant only the owner (icacls <file> /inheritance:r /grant:r "%USERNAME%:F")'
+    else
+        fail 'secret file must have mode 600 or 400'
     fi
-    case "$mode" in
-        600|400) ;;
-        *) fail 'secret file must have mode 600 or 400' ;;
-    esac
     secret_lines=$(wc -l < "$secret" | tr -d '[:space:]')
     content_lines=$(grep -c '^' "$secret" 2>/dev/null || true)
     blank_lines=$(grep -c '^$' "$secret" 2>/dev/null || true)
@@ -368,8 +505,9 @@ cmd_rm() {
     local lane=$1 base lane_parent tmp_parent
     [ -d "$lane" ] || fail 'refusing: not a lane scratch dir'
     [ -f "$lane/.lane-marker" ] || fail 'refusing: not a lane scratch dir'
-    lane_parent=$(CDPATH='' cd -- "$lane/.." && pwd -P) || fail 'refusing: not a lane scratch dir'
-    tmp_parent=$(CDPATH='' cd -- "${TMPDIR:-/tmp}" && pwd -P) || fail 'refusing: not a lane scratch dir'
+    # host_path: on MSYS, /tmp and C:/.../Temp are the same directory but pwd -P differs.
+    lane_parent=$(CDPATH='' cd -- "$lane/.." && host_path "$(pwd -P)") || fail 'refusing: not a lane scratch dir'
+    tmp_parent=$(CDPATH='' cd -- "${TMPDIR:-/tmp}" && host_path "$(pwd -P)") || fail 'refusing: not a lane scratch dir'
     [ "$lane_parent" = "$tmp_parent" ] || fail 'refusing: not a lane scratch dir'
     base=${lane##*/}
     case "$base" in
