@@ -43,7 +43,7 @@ The operator shares none of your context. The brief is the six-part spec of the 
 1. **Objective** — the behaviour under test, one paragraph, and the expected visible result.
 2. **Target** — the exact authorized URL and which runtime it is. Artifacts live in the operator's own scratch dir; the brief never names a checkout as the working directory.
 3. **Steps** — real UI steps: what to click, type, drag, in what order; any reload or persistence check; what may be mutated and what may not.
-4. **Login** — the authorized flow if needed, and the path of the 0600 credential file the lane splices into the prompt (one secret per file, written outside any repository, by the architect or a runner that never echoes it). Otherwise "none".
+4. **Login** — the authorized flow if needed, and the path of the 0600 credential file the lane splices into the prompt (one secret per file, written outside any repository, by the architect or a runner that never echoes it; on Windows, lock it with `icacls <file> /inheritance:r /grant:r "%USERNAME%:F"`). Otherwise "none".
 5. **Evidence** — what to return: observed origin, per-step outcome, screenshots of which states, console errors, persistence after reload.
 6. **Reasoning** — `REASONING: medium` unless a flow is unusually long or fragile; the operator passes it through.
 

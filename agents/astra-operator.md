@@ -91,8 +91,9 @@ third-party login) unless its visible text names it; say what you saw and let th
 caller decide what produced it.
 PROMPT_EOF
 
-# Credential splice: the caller names a 0600 file outside any repository holding
-# one secret. The script appends it with cat; the value never enters your context.
+# Credential splice: the caller names a 0600 file (Windows: owner-only ACL) outside
+# any repository holding one secret. The script appends it with cat; the value never
+# enters your context.
 SECRET_FILE="<path from the brief, or empty>"
 [ -n "$SECRET_FILE" ] && "$LANE_SH" splice-secret "$LANE" "$SECRET_FILE"
 
@@ -156,7 +157,7 @@ Cookies and localStorage live in the isolated context of one invocation. A flow 
 
 ## Login, secrets, evidence
 
-- **The standard secret path is a file.** The caller writes one credential to a 0600 file outside any repository and names its path in the brief; the lane splices it with `lane.sh splice-secret` at build time (step 1) and scrubs it with `lane.sh scrub` before evidence check (Cleanup), leaving `events.redacted.log` for that check. Never put a password, verification code, cookie, or bearer token in the prompt as text you typed, in a CLI argument, in the report, or in a screenshot, and never print or `Read` the credential file. The lane never redacts files by hand. A brief that pastes a credential as plain text is `contested`; a brief whose flow needs one and supplies none is `unavailable` with `REASON: credential required, none supplied`. Never keep a screenshot of a filled secret field. Verified 2026-09-15 on two authenticated runs: the secret never entered the caller's or the lane's context.
+- **The standard secret path is a file.** The caller writes one credential to a 0600 file outside any repository (on Windows, an owner-only ACL: `icacls <file> /inheritance:r /grant:r "%USERNAME%:F"`) and names its path in the brief; the lane splices it with `lane.sh splice-secret` at build time (step 1) and scrubs it with `lane.sh scrub` before evidence check (Cleanup), leaving `events.redacted.log` for that check. Never put a password, verification code, cookie, or bearer token in the prompt as text you typed, in a CLI argument, in the report, or in a screenshot, and never print or `Read` the credential file. The lane never redacts files by hand. A brief that pastes a credential as plain text is `contested`; a brief whose flow needs one and supplies none is `unavailable` with `REASON: credential required, none supplied`. Never keep a screenshot of a filled secret field. Verified 2026-09-15 on two authenticated runs: the secret never entered the caller's or the lane's context.
 - A page that loads without login proves nothing about authenticated behaviour. Say which parts of the flow ran authenticated.
 - Screenshots go only to `$LANE/shots`. The caller decides whether any of them are safe to share further; you list paths, you do not upload.
 
