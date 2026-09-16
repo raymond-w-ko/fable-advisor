@@ -43,7 +43,7 @@ The operator shares none of your context. The brief is the six-part spec of the 
 1. **Objective** — the behaviour under test, one paragraph, and the expected visible result.
 2. **Target** — the exact authorized URL and which runtime it is. Artifacts live in the operator's own scratch dir; the brief never names a checkout as the working directory.
 3. **Steps** — real UI steps: what to click, type, drag, in what order; any reload or persistence check; what may be mutated and what may not.
-4. **Login** — the authorized flow if needed, and how credentials reach the worker through the approved secret handling. Otherwise "none".
+4. **Login** — the authorized flow if needed, and the path of the 0600 credential file the lane splices into the prompt (one secret per file, written outside any repository, by the architect or a runner that never echoes it). Otherwise "none".
 5. **Evidence** — what to return: observed origin, per-step outcome, screenshots of which states, console errors, persistence after reload.
 6. **Reasoning** — `REASONING: medium` unless a flow is unusually long or fragile; the operator passes it through.
 
@@ -64,7 +64,7 @@ Navigation alone, an HTTP 200, or an exit-zero worker are not evidence of the re
 
 ## Secrets in login flows
 
-- Credentials, verification codes, cookies, and bearer tokens never appear in the brief as plain text you copied from somewhere, in CLI arguments, in the report, or in screenshots. They reach the worker only through the project's approved secret-handling path, and the operator strips credential-bearing tool arguments before keeping evidence.
+- Credentials, verification codes, cookies, and bearer tokens never appear in the brief as plain text you copied from somewhere, in CLI arguments, in the report, or in screenshots. They reach the worker only as a 0600 file named in the brief, which the operator splices into the prompt with `cat` and shreds with the prompt and events afterwards; the architect never reads the value into its context either. The operator strips credential-bearing tool arguments before keeping evidence.
 - Existing authorized identities and the normal side effects of logging in need no new permission. A new identity, a password reset, or a change to another user's state does.
 - Never screenshot a filled password or code field. Screenshots the user might share further are sanitized first; the architect decides what leaves the machine, and the operator only lists paths.
 
