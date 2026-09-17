@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -eu
 
-CAP=3540
-DEADLINE=3600
+CAP=5340
+DEADLINE=5400
 KILL_GRACE=15
-# CAP is generous on purpose because an interrupted codex run loses its verification and final message.
+# CAP stays below DEADLINE so an interrupted run can still finish verification and its final message.
 
 # Git Bash / MSYS2 on Windows: no pgrep, no POSIX file modes, and paths that
 # other tools only understand in Windows form.
@@ -19,6 +19,7 @@ usage() {
         '' \
         'Subcommands:' \
         '  init <prefix>' \
+        '  gc [hours]' \
         '  launch <lane-dir> -- <command and args...>' \
         '  wait <lane-dir> [seconds]' \
         '  status <lane-dir>' \
@@ -116,13 +117,15 @@ win_snapshot() {
 
 collect_win_descendants() {
     [ "$IS_MSYS" -eq 1 ] || return 0
-    local winpid snapshot
+    local winpids=$1 snapshot winpid
     snapshot=$(win_snapshot) || return 0
     WIN_VISITED=" "
-    for winpid in "$@"; do
+    while IFS= read -r winpid; do
         [ -n "$winpid" ] || continue
         walk_win_tree "$winpid" "$snapshot"
-    done
+    done <<EOF
+$winpids
+EOF
 }
 
 walk_win_tree() {
@@ -238,6 +241,7 @@ cmd_init() {
     [ "$#" -eq 1 ] || fail 'init requires prefix'
     umask 077
     local lane
+    (cmd_gc 24 >&2) || true
     lane=$(mktemp -d "${TMPDIR:-/tmp}/$1.XXXXXX") || fail 'mktemp failed'
     mkdir -p "$lane/shots"
     : >> "$lane/.lane-marker"
@@ -254,6 +258,7 @@ cmd_launch() {
     [ "$#" -gt 0 ] || fail 'launch requires command'
     require_lane "$lane"
     [ -f "$lane/stdin" ] || fail "missing stdin: $lane/stdin"
+    [ -f "$lane/rc" ] && fail "lane already ran: $lane (init a new lane)"
 
     local timeout_bin
     timeout_bin=$(find_gnu_timeout)
@@ -358,7 +363,7 @@ cmd_kill() {
     # Snapshot the native tree now: once the MSYS parents die, orphaned
     # native processes keep a stale parent id and can no longer be walked.
     WIN_DESCENDANTS=()
-    collect_win_descendants $(msys_winpids "$pid" ${DESCENDANTS[@]+"${DESCENDANTS[@]}"})
+    collect_win_descendants "$(msys_winpids "$pid" ${DESCENDANTS[@]+"${DESCENDANTS[@]}"})"
     kill -TERM -- "-$pid" 2>/dev/null || true
     for child in ${DESCENDANTS[@]+"${DESCENDANTS[@]}"}; do
         kill -TERM "$child" 2>/dev/null || true
@@ -517,6 +522,31 @@ cmd_rm() {
     rm -rf -- "$lane"
 }
 
+cmd_gc() {
+    [ "$#" -le 1 ] || fail 'gc requires optional hours'
+    local hours=${1:-24}
+    require_seconds "$hours"
+    local tmp=${TMPDIR:-/tmp}
+    local minutes lane candidates=0 removed=0
+    minutes=$((10#$hours * 60))
+    for lane in "$tmp"/*-lane.*; do
+        [ -d "$lane" ] || continue
+        candidates=$((candidates + 1))
+        [ -f "$lane/.lane-marker" ] || continue
+        [ -f "$lane/rc" ] || continue
+        if [ -n "$(find "$lane/rc" -type f -mmin +"$minutes" -print 2>/dev/null)" ]; then
+            # Subshell so one undeletable directory skips instead of aborting the sweep.
+            if (cmd_rm "$lane") 2>/dev/null; then
+                removed=$((removed + 1))
+                printf 'gc removed %s\n' "$lane"
+            else
+                printf 'gc skipped %s\n' "$lane" >&2
+            fi
+        fi
+    done
+    printf 'gc removed %s of %s candidates\n' "$removed" "$candidates"
+}
+
 [ "$#" -gt 0 ] || { usage; exit 2; }
 command=$1
 shift
@@ -530,5 +560,6 @@ case "$command" in
     splice-secret) cmd_splice_secret "$@" ;;
     scrub) cmd_scrub "$@" ;;
     rm) cmd_rm "$@" ;;
+    gc) cmd_gc "$@" ;;
     -h|--help|*) usage; exit 2 ;;
 esac

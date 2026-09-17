@@ -11,6 +11,15 @@ LANE5=
 BAD=
 SECRET=
 SECRET_MULTI=
+TEST_TMPDIR=
+GC_TMPDIR=
+GC_OLD=
+GC_YOUNG=
+GC_LIVE=
+GC_NO_MARKER=
+GC_INIT_OLD=
+GC_INIT_LANE=
+GC_INIT_STDERR=
 
 case $(uname -s 2>/dev/null) in
     MINGW*|MSYS*|CYGWIN*) IS_MSYS=1 ;;
@@ -25,6 +34,21 @@ cleanup() {
             "$SCRIPT" rm "$lane" >/dev/null 2>&1 || true
         fi
     done
+    for lane in "$GC_OLD" "$GC_YOUNG" "$GC_LIVE" "$GC_INIT_OLD" "$GC_INIT_LANE"; do
+        if [ -n "$lane" ] && [ -d "$lane" ]; then
+            TMPDIR="$GC_TMPDIR" "$SCRIPT" kill "$lane" >/dev/null 2>&1 || true
+            TMPDIR="$GC_TMPDIR" "$SCRIPT" rm "$lane" >/dev/null 2>&1 || true
+        fi
+    done
+    if [ -n "$GC_NO_MARKER" ] && [ -d "$GC_NO_MARKER" ]; then
+        rmdir "$GC_NO_MARKER" 2>/dev/null || true
+    fi
+    if [ -n "$GC_INIT_STDERR" ]; then
+        rm -f -- "$GC_INIT_STDERR"
+    fi
+    if [ -n "$GC_TMPDIR" ] && [ -d "$GC_TMPDIR" ]; then
+        rmdir "$GC_TMPDIR" 2>/dev/null || true
+    fi
     if [ -n "$BAD" ] && [ -d "$BAD" ]; then
         rmdir "$BAD" 2>/dev/null || true
     fi
@@ -33,6 +57,9 @@ cleanup() {
     fi
     if [ -n "$SECRET_MULTI" ]; then
         rm -f -- "$SECRET_MULTI"
+    fi
+    if [ -n "$TEST_TMPDIR" ] && [ -d "$TEST_TMPDIR" ]; then
+        rmdir "$TEST_TMPDIR" 2>/dev/null || true
     fi
 }
 trap cleanup EXIT
@@ -162,6 +189,19 @@ check_deadline_ok() {
     esac
 }
 
+backdate_file() {
+    local file=$1 gnu_offset=$2 bsd_offset=$3
+    if touch -d "$gnu_offset" "$file" 2>/dev/null; then
+        return 0
+    fi
+    touch -t "$(date -v"$bsd_offset" '+%Y%m%d%H%M.%S')" "$file"
+}
+
+check_one_line() {
+    [ -n "$GC_INIT_OUTPUT" ] || return 1
+    [ "$(printf '%s\n' "$GC_INIT_OUTPUT" | wc -l | tr -d '[:space:]')" -eq 1 ]
+}
+
 check_scrub_counts() {
     case "$SCRUB_OUTPUT" in
         *'secret-matches=1'*) return 0 ;;
@@ -184,6 +224,9 @@ check_host_path() {
         *) return 0 ;;
     esac
 }
+
+TEST_TMPDIR=$(mktemp -d "${TMPDIR:-/tmp}/lane-smoke.XXXXXX")
+export TMPDIR="$TEST_TMPDIR"
 
 LANE=$("$SCRIPT" init smoke-lane)
 if [ "$IS_MSYS" -eq 1 ]; then
@@ -306,5 +349,44 @@ fi
 check 25 'rm refuses matching name without marker' check_bad_rm
 "$SCRIPT" rm "$LANE3"
 check 26 'rm removes real lane' check_real_rm
+
+GC_TMPDIR=$(mktemp -d "$TEST_TMPDIR/gc.XXXXXX")
+GC_OLD=$(TMPDIR="$GC_TMPDIR" "$SCRIPT" init old-lane 2>/dev/null)
+printf '0\n' >> "$GC_OLD/rc"
+backdate_file "$GC_OLD/rc" '-2 hours' '-2H'
+GC_YOUNG=$(TMPDIR="$GC_TMPDIR" "$SCRIPT" init young-lane 2>/dev/null)
+printf '0\n' >> "$GC_YOUNG/rc"
+GC_LIVE=$(TMPDIR="$GC_TMPDIR" "$SCRIPT" init live-lane 2>/dev/null)
+GC_NO_MARKER="$GC_TMPDIR/no-marker-lane.fixture"
+mkdir -p "$GC_NO_MARKER"
+GC_OUTPUT=$(TMPDIR="$GC_TMPDIR" "$SCRIPT" gc 1)
+check 27 'gc reports removed old finished lane' grep -q "gc removed $GC_OLD" <<<"$GC_OUTPUT"
+check 28 'gc removes old finished lane' test ! -d "$GC_OLD"
+check 29 'gc keeps young finished lane' test -d "$GC_YOUNG"
+check 30 'gc keeps live lane without rc' test -d "$GC_LIVE"
+check 31 'gc keeps lane without marker' test -d "$GC_NO_MARKER"
+
+GC_INIT_OLD=$(TMPDIR="$GC_TMPDIR" "$SCRIPT" init init-old-lane 2>/dev/null)
+printf '0\n' >> "$GC_INIT_OLD/rc"
+backdate_file "$GC_INIT_OLD/rc" '-2 days' '-2d'
+GC_INIT_STDERR=$(mktemp "$TEST_TMPDIR/gc-init.stderr.XXXXXX")
+GC_INIT_OUTPUT=$(TMPDIR="$GC_TMPDIR" "$SCRIPT" init init-new-lane 2>"$GC_INIT_STDERR")
+GC_INIT_LANE=$GC_INIT_OUTPUT
+check 32 'init prints one lane path line' check_one_line
+check 33 'init runs gc for old finished lane' test ! -d "$GC_INIT_OLD"
+check 34 'init sends gc output to stderr' grep -q "gc removed $GC_INIT_OLD" "$GC_INIT_STDERR"
+
+USAGE_OUTPUT=$("$SCRIPT" --help 2>&1 || true)
+check 35 'usage lists gc' grep -q '  gc \[hours\]' <<<"$USAGE_OUTPUT"
+check 36 'lane cap is 5340 seconds' grep -qx 'CAP=5340' "$SCRIPT"
+check 37 'lane deadline is 5400 seconds' grep -qx 'DEADLINE=5400' "$SCRIPT"
+
+REUSED_LANE=$(TMPDIR="$GC_TMPDIR" "$SCRIPT" init reused-lane 2>/dev/null)
+printf 'noop\n' >> "$REUSED_LANE/stdin"
+printf '0\n' >> "$REUSED_LANE/rc"
+launch_refuses_reuse() {
+    ! "$SCRIPT" launch "$REUSED_LANE" -- true >/dev/null 2>&1
+}
+check 38 'launch refuses a lane that already ran' launch_refuses_reuse
 
 exit "$FAILURES"
