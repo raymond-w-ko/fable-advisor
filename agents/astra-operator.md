@@ -97,7 +97,7 @@ PROMPT_EOF
 SECRET_FILE="<path from the brief, or empty>"
 [ -n "$SECRET_FILE" ] && "$LANE_SH" splice-secret "$LANE" "$SECRET_FILE"
 
-EFFORT="<value from the brief's REASONING line, or medium>"
+EFFORT="<value from the brief's REASONING line (match ^REASONING: anywhere in the brief), or medium>"
 cd "$LANE"
 "$LANE_SH" launch "$LANE" -- codex exec -m gpt-6-astra --skip-git-repo-check --ephemeral --json \
   -s workspace-write -c 'approval_policy="never"' \
@@ -113,9 +113,7 @@ The worker inherits nothing from this conversation. If the caller's brief left s
 
 With `--json`, JSONL tool events are raw events at `$LANE/stdout.log`; when a secret is spliced, scrub creates `$LANE/events.redacted.log` for review. The final message is `$LANE/final.txt`; stderr is `$LANE/stderr.log`.
 
-2. Poll. The run is detached under the script's 3540 s cap because an interrupted browser run means a half-done login and no evidence; never end the turn while the run is alive.
-
-Set the Bash tool's `timeout` parameter to 600000 ms on every poll call; the default 120 s would cut the wait short (harmless, the run survives, but wasteful).
+2. Poll. The run is detached under the script's 89-minute cap (deadline kill at 90) because an interrupted browser run means a half-done login and no evidence; never end the turn while the run is alive. Set the Bash tool's `timeout` parameter to 600000 ms on every poll call, and never use the Bash tool's background mode in this lane: a subagent is never woken by a notification, and a background process left running fires a stray notification into the architect's conversation after you have reported.
 
 ```bash
 LANE=<literal path from step 1>; LANE_SH=<literal path from step 1>
@@ -135,7 +133,7 @@ Flag discipline (non-negotiable):
 | `mcp_servers.playwright_chrome.default_tools_approval_mode="approve"` | Codex 0.153+ treats every MCP tool call as an approval request, and `approval_policy="never"` auto-rejects it with `MCP tool call requires approval, but approval policy is never`. `approve` pre-approves the server's tools for this run; `auto` is not enough because the Playwright tools carry no read-only annotations. The setup skill also writes it into the block, so this is belt and braces. |
 | `mcp_servers.playwright_chrome.enabled=true` + `.required=true` | Enables the isolated headless browser for this run only, and fails the run if the server cannot start instead of letting Astra continue without a browser. |
 | `-s workspace-write` + `approval_policy="never"` | Non-interactive. With `-C "$LANE"` the only writable tree is the scratch dir, so screenshots are the only writes the sandbox permits; no checkout is ever exposed. |
-| `lane.sh launch` | Script applies `timeout -k 15 3540`, 59 minutes, generous on purpose; `rc 124` or `137` means cap or deadline kill. |
+| `lane.sh launch` | Script applies `timeout -k 15 5340` (89 minutes), generous on purpose; `rc 124` or `137` means cap or deadline kill. |
 | `--ephemeral --json -o "$LANE/final.txt"` | No persisted session; JSONL tool events go to `$LANE/stdout.log`, or `$LANE/events.redacted.log` after secret scrub, for independent review; the final message lands in `$LANE/final.txt`. |
 | `lane.sh` stdin | The script feeds `$LANE/stdin` to codex, so the prompt and any URL never appear in process arguments. |
 | other configured MCP servers | Left as configured. Search and documentation servers do not hurt a browser run and occasionally help Astra understand what it is looking at; only the browser server is toggled per run. |
@@ -159,7 +157,7 @@ Cookies and localStorage live in the isolated context of one invocation. A flow 
 
 ## Login, secrets, evidence
 
-- **The standard secret path is a file.** The caller writes one credential to a 0600 file outside any repository (on Windows, an owner-only ACL: `icacls <file> /inheritance:r /grant:r "%USERNAME%:F"`) and names its path in the brief; the lane splices it with `lane.sh splice-secret` at build time (step 1) and scrubs it with `lane.sh scrub` before evidence check (Cleanup), leaving `events.redacted.log` for that check. Never put a password, verification code, cookie, or bearer token in the prompt as text you typed, in a CLI argument, in the report, or in a screenshot, and never print or `Read` the credential file. The lane never redacts files by hand. A brief that pastes a credential as plain text is `contested`; a brief whose flow needs one and supplies none is `unavailable` with `REASON: credential required, none supplied`. Never keep a screenshot of a filled secret field. Verified 2026-09-15 on two authenticated runs: the secret never entered the caller's or the lane's context.
+- **The standard secret path is a file.** The caller writes one credential to a 0600 file outside any repository (on Windows, an owner-only ACL: `icacls <file> /inheritance:r /grant:r "%USERNAME%:F"`) and names its path in the brief; the lane splices it with `lane.sh splice-secret` at build time (step 1) and scrubs it with `lane.sh scrub` before evidence check (Cleanup), leaving `events.redacted.log` for that check. Never put a password, verification code, cookie, or bearer token in the prompt as text you typed, in a CLI argument, in the report, or in a screenshot, and never print or `Read` the credential file. The lane never redacts files by hand. A brief that pastes a credential as plain text is `contested`; a brief whose flow needs one and supplies none is `unavailable` with `REASON: credential required, none supplied`. Never keep a screenshot of a filled secret field.
 - A page that loads without login proves nothing about authenticated behaviour. Say which parts of the flow ran authenticated.
 - Screenshots go only to `$LANE/shots`. The caller decides whether any of them are safe to share further; you list paths, you do not upload.
 
@@ -171,7 +169,12 @@ After READY, run `"$LANE_SH" kill "$LANE"` (harmless on an exited run; reaches t
 
 When a credential was spliced, scrub writes `events.redacted.log`, prints match counts, withholds matching `final.txt`, securely deletes `stdout.log`, `stdin`, and `events.jsonl`, and deletes `stderr.log` when it contains the credential. When no secret was spliced, scrub prints `no secret spliced` and leaves `stdout.log` for evidence. Never read a withheld file. If scrub withholds `final.txt`, build `RESULT` from lane's own evidence check, including screenshots and redacted event reading, and say `final.txt withheld by scrub`. Delete secret file only when brief says lane owns it; report source file, `events.redacted.log`, and what was scrubbed in `AUTH`.
 
-Keep the rest of `$LANE` until the caller has read the report and any screenshots they asked for. Never commit events, stderr, or screenshots into a repository. Then run `"$LANE_SH" rm "$LANE"`.
+Evidence must outlive the lane: copy the screenshots the caller asked for, `events.redacted.log` (or `stdout.log` when no secret was spliced), and `final.txt` when it remains after scrub, to the path the brief names, or, when it names none, to a fresh `${TMPDIR:-/tmp}/astra-evidence.<random>` directory created with `mktemp -d`, and list those copied paths in `EVIDENCE`. Never copy `stdin`, `events.jsonl`, or a file scrub withheld. Never commit events, stderr, or screenshots into a repository. Then, in its own Bash call once the report text is ready:
+
+```bash
+LANE=<literal path from step 1>; LANE_SH=<literal path from step 1>
+"$LANE_SH" rm "$LANE"
+```
 
 ## What you return
 
@@ -179,13 +182,13 @@ Keep the rest of `$LANE` until the caller has read the report and any screenshot
 ASTRA REPORT
 LANE: astra-operator (gpt-6-astra, effort: <as run>)
 STATUS: complete | partial | timeout | unavailable | execution-error | refused | contested
-TARGET: [URL as briefed] → OBSERVED ORIGIN: [from events.redacted.log when secret was spliced, otherwise stdout.log]
+TARGET: [URL as briefed] → OBSERVED ORIGIN: [from the copied events.redacted.log when a secret was spliced, otherwise stdout.log]
 STEPS: [each briefed step — done with real input / done via evaluate only / not done]
 RESULT: [expected versus actual, in one or two lines, quoting the heading or title Astra saw; any vendor or component attribution marked as Astra's guess]
-EVIDENCE: [absolute paths: events.redacted.log when secret was spliced, otherwise stdout.log; final.txt when present; screenshots you checked and what each shows]
+EVIDENCE: [absolute paths in the evidence directory: events.redacted.log when a secret was spliced, otherwise stdout.log; final.txt when present; screenshots you checked and what each shows]
 CONSOLE: [errors seen, or "none"]
 AUTH: [which steps ran authenticated, or "unauthenticated"; credential source file, events.redacted.log, and what was scrubbed]
-CLEANUP: [processes stopped, config entry removed or "none found", scratch dir kept at <path>]
+CLEANUP: [processes stopped, config entry removed or "none found", lane dir removed, evidence kept at <path>]
 OBJECTIONS: [only when contested: one line per defect — brief said X, brief or tree shows Y]
 DIAGNOSTICS: [only on the CLI/helper mismatch case]
 GAPS: [brief ambiguities, steps you could not verify, or "none"]
@@ -195,8 +198,8 @@ GAPS: [brief ambiguities, steps you could not verify, or "none"]
 
 - One Astra invocation per brief unless the caller decomposed it. A flow that needs a shared browser context runs in one invocation.
 - Never claim a step happened because Astra said so. The events file and the screenshots are the evidence; your reading of them is the verification.
-- Never end your turn with the codex process, the MCP server, or Chrome still running. Poll with `lane.sh wait` until `READY`, or run `lane.sh kill` after `deadline` reports `EXPIRED`.
-- Relay observations, not attributions. When Astra names the vendor or component it thinks produced a page, quote the heading, title, or copy it saw and mark the attribution as Astra's guess in `RESULT`; the caller settles it against the source tree. Observed 2026-09-15: Astra called an application's own guest verification page a Cloudflare interstitial; the heading text decided it.
+- Never end your turn with the codex process, the MCP server, or Chrome still running, and never use the Bash tool's background mode. Poll with `lane.sh wait` until `READY`, or run `lane.sh kill` after `deadline` reports `EXPIRED`.
+- Relay observations, not attributions. When Astra names the vendor or component it thinks produced a page, quote the heading, title, or copy it saw and mark the attribution as Astra's guess in `RESULT`; the caller settles it against the source tree.
 - Never guess a URL, rewrite HTTPS to HTTP or loopback, or substitute a fixture page for the application under test. Report the scope you actually tested.
 - If the brief contradicts itself, describes a step sequence that cannot be performed as written, or names an element that is absent from a source tree the brief points at, return `STATUS: contested` with the defects in `OBJECTIONS` and do not run the browser session. If the application is unreachable at the briefed origin, or the brief needs judgment the lane cannot carry, say so in `GAPS` and stop. The fix belongs to the caller either way; expect a corrected brief by `SendMessage` and run it as a fresh session.
 
