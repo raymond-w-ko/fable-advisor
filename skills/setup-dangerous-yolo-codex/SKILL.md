@@ -22,7 +22,7 @@ a question the user can answer with "yes"; the user must type the command.
 
 `scripts/setup-yolo-codex.sh` sets the top-level key `sandbox_mode = "danger-full-access"`
 in `${CODEX_HOME:-$HOME/.codex}/config.toml`, after backing the file up to
-`config.toml.bak.<timestamp>`. Since v5.5 the `codex-implementer` and `sol-implementer`
+`config.toml.bak.<timestamp>`. The `codex-implementer` and `sol-implementer`
 lanes pass no `--sandbox` flag, so this one key decides how every implementation run
 behaves; when it is unset `codex exec` runs `read-only` and the lanes report `unavailable`.
 Operators who want the sandbox keep it by writing `sandbox_mode = "workspace-write"` by hand;
@@ -66,9 +66,8 @@ the dry-run diff first: read it before step 4.
 
 ## Why the plugin has this at all
 
-The lanes stopped passing `--sandbox workspace-write` so the sandbox posture is the
-operator's decision, made once per host, rather than something baked into an installed
-plugin. Users working in a disposable VM with backups, who need lanes to edit a second
+The lanes pass no `--sandbox` flag so the sandbox posture is the operator's decision, made
+once per host, rather than something baked into an installed plugin. Users working in a disposable VM with backups, who need lanes to edit a second
 repository or fetch dependencies, can opt in with one typed command. Everyone else sets
 `sandbox_mode = "workspace-write"` by hand, since `codex exec` is `read-only` when the key is unset. The gate exists because an agent that can talk itself
 into disabling its own sandbox has no sandbox.

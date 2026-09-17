@@ -72,7 +72,7 @@ Navigation alone, an HTTP 200, or an exit-zero worker are not evidence of the re
 
 - The operator stops every process the run owned: codex, the MCP server, Chrome. It never ends its turn with any of them running.
 - `--ephemeral` does not guarantee zero config changes: recent Codex versions persist a project-trust entry for the run's working directory. The operator removes only an exact task-created entry and preserves the rest.
-- Browser transcripts, events, and screenshots stay in the operator's scratch dir outside any repository until the architect has read what it needs. They are never committed and never uploaded implicitly.
+- The operator removes its lane dir when it reports and copies the evidence (redacted events, final message, screenshots) to the path the brief names or to a `${TMPDIR:-/tmp}/astra-evidence.<random>` dir listed in `CLEANUP`. That dir is the architect's to delete once the evidence has been read; `lane.sh gc` does not touch it. Evidence is never committed and never uploaded implicitly.
 - If the task created a test stack or a test worktree, the project's own cleanup policy applies after the report.
 
 ## Beyond the browser: desktop computer use
