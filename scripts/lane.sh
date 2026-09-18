@@ -77,6 +77,31 @@ line_count() {
     fi
 }
 
+file_mtime() {
+    local mtime
+    if mtime=$(stat -c %Y "$1" 2>/dev/null); then
+        printf '%s\n' "$mtime"
+    elif mtime=$(stat -f %m "$1" 2>/dev/null); then
+        printf '%s\n' "$mtime"
+    else
+        printf '0\n'
+    fi
+}
+
+# Seconds since the run last wrote stdout.log or progress.md; the launch time
+# when neither exists yet. A large age with no rc means the run is stuck.
+last_output_age() {
+    local lane=$1 now latest file mtime
+    now=$(date +%s)
+    latest=$(cat "$lane/started")
+    for file in "$lane/stdout.log" "$lane/progress.md"; do
+        [ -f "$file" ] || continue
+        mtime=$(file_mtime "$file")
+        [ "$mtime" -gt "$latest" ] && latest=$mtime
+    done
+    printf '%s\n' "$((now - latest))"
+}
+
 find_children() {
     if command -v pgrep >/dev/null 2>&1; then
         pgrep -P "$1" 2>/dev/null || true
@@ -330,7 +355,7 @@ cmd_status() {
     [ "$#" -eq 1 ] || fail 'status requires lane directory'
     local lane=$1
     require_lane "$lane"
-    local pid started now alive rc stdout_lines stderr_lines elapsed
+    local pid started now alive rc stdout_lines stderr_lines progress_lines output_age elapsed
     pid=$(cat "$lane/pid")
     started=$(cat "$lane/started")
     now=$(date +%s)
@@ -347,8 +372,10 @@ cmd_status() {
     fi
     stdout_lines=$(line_count "$lane/stdout.log")
     stderr_lines=$(line_count "$lane/stderr.log")
-    printf 'pid=%s alive=%s elapsed=%ss rc=%s stdout_lines=%s stderr_lines=%s\n' \
-        "$pid" "$alive" "$elapsed" "$rc" "$stdout_lines" "$stderr_lines"
+    progress_lines=$(line_count "$lane/progress.md")
+    output_age=$(last_output_age "$lane")
+    printf 'pid=%s alive=%s elapsed=%ss rc=%s stdout_lines=%s stderr_lines=%s progress_lines=%s last_output_age=%ss\n' \
+        "$pid" "$alive" "$elapsed" "$rc" "$stdout_lines" "$stderr_lines" "$progress_lines" "$output_age"
 }
 
 cmd_kill() {

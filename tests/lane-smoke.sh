@@ -135,6 +135,19 @@ check_status_alive_no() {
     esac
 }
 
+check_status_heartbeat() {
+    case "$STATUS_AFTER" in
+        *'progress_lines=0 last_output_age='[0-9]*'s'*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+check_status_fresh() {
+    local age
+    age=$(sed -n 's/.*last_output_age=\([0-9]*\)s.*/\1/p' <<<"$STATUS_PROGRESS")
+    [ -n "$age" ] && [ "$age" -lt 3 ]
+}
+
 check_wait_ready() {
     [ "$WAIT_OUTPUT" = 'READY rc=3' ]
 }
@@ -256,6 +269,11 @@ check 7 'wait returns within 10 seconds' check_wait_fast
 check 8 'dummy command writes final file' grep -q '^done$' "$LANE/final.txt"
 STATUS_AFTER=$("$SCRIPT" status "$LANE")
 check 9 'status reports stopped launch' check_status_alive_no
+check 39 'status reports progress lines and last output age' check_status_heartbeat
+printf 'edited a.txt\n' >> "$LANE/progress.md"
+STATUS_PROGRESS=$("$SCRIPT" status "$LANE")
+check 40 'status counts progress.md lines' grep -q 'progress_lines=1 ' <<<"$STATUS_PROGRESS"
+check 41 'status resets last output age on progress write' check_status_fresh
 check 10 'launch pid no longer exists' check_no_pid
 
 LANE2=$("$SCRIPT" init smoke-lane)

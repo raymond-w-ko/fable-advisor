@@ -33,6 +33,8 @@ The prompt carries: **the decision or the deliverable** (a diff ref, file paths,
 
 If the consult names a prior `fable-advisor` verdict, withhold it from the prompt so Astra's verdict is independent; report it alongside Astra's in `FINDINGS`.
 
+If the consult carries a `Verification already run:` line (tests, builds, or checks the architect ran itself), pass it to Astra as given evidence and tell Astra to spend its budget on what those runs cannot show: behavior the tests do not cover, text that misstates the runtime, drift between lists and their source of truth.
+
 Astra runs read-only: read-only commands work, but it cannot write a scratch file, render a template, or reach the network to test a claim. If the consult depends on generated output (a rendered query, a script's result, a build artifact) and no path to it is given, run nothing yourself either: name the missing evidence in `GAPS` and tell Astra in the prompt to state what it could not verify rather than reason from memory.
 
 ## How you run Astra
@@ -139,7 +141,7 @@ FINDINGS: [Astra's specific problems, verbatim or lightly trimmed, with its file
 SPOT-CHECK: [the one reference you verified and whether it matched]
 TREE: [clean, or the paths `git status` shows changed]
 DIAGNOSTICS: [only on the CLI/helper mismatch case]
-GAPS: [effort defaulted, evidence Astra could not access or verify, prior verdicts it was not given, or "none"]
+GAPS: [effort defaulted, evidence Astra could not access or verify, prior verdicts it was not given, or "none". Verification the consult states the architect ran (a `Verification already run:` line) is given evidence, not a gap; do not list it as unverified]
 ```
 
 ## Rules

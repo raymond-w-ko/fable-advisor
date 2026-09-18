@@ -78,7 +78,7 @@ The architect writes the spec, picks the lane and effort (rate limiting touches 
 
 ## Lane mechanics
 
-All codex-backed lanes share `scripts/lane.sh`: a private scratch directory per run, detached launch under an 89-minute cap with a kill at 90, bounded `wait`, `status`, credential `splice-secret` and `scrub` for the browser lane, `rm` when the report is written, and `gc` (also run by `init`) that removes finished lane directories older than 24 hours. Run `bash tests/lane-smoke.sh` to exercise it with a dummy command in seconds. Agents resolve the script through `CLAUDE_PLUGIN_ROOT`, then the plugin cache, then the marketplace checkout.
+All codex-backed lanes share `scripts/lane.sh`: a private scratch directory per run, detached launch under an 89-minute cap with a kill at 90, bounded `wait`, `status` (with `last_output_age` and `progress_lines` so a lane can tell a stuck run from a slow one; codex appends milestones to `progress.md`, which survives the cap), credential `splice-secret` and `scrub` for the browser lane, `rm` when the report is written, and `gc` (also run by `init`) that removes finished lane directories older than 24 hours. Run `bash tests/lane-smoke.sh` to exercise it with a dummy command in seconds. Agents resolve the script through `CLAUDE_PLUGIN_ROOT`, then the plugin cache, then the marketplace checkout.
 
 `scripts/setup-yolo-codex.sh` (behind the user-typed `/fable-advisor:setup-dangerous-yolo-codex` command) has its own smoke test, `bash tests/setup-yolo-codex-smoke.sh`, which runs against temporary config files only.
 

@@ -61,12 +61,18 @@ and the architect work in the same checkout. Leave those files alone, do not
 revert or tidy them, and do not report them as yours or as unauthorized. Report
 only the files you changed.
 
+Do not run package installs, dependency fetches, generated-artifact builds, or
+service restarts unless the spec names them; the checkout's watchers and
+dependency links belong to the operator. If a verification step needs one, stop
+and say so in your final message instead.
+
 [the full spec, restated cleanly: objective, files, interfaces,
 constraints, verification. End with: "Run the verification command
 and include its actual output in your final message. If that command
 does not compile or parse every file you changed, also run the check
 that does, and include it."]
 SPEC_EOF
+printf '\nProgress file: %s\nAppend one line to that file each time you finish a file and each time you run a verification command (the command and a one-line result). It is read if this run is interrupted; keep it terse.\n' "$LANE/progress.md" >> "$LANE/stdin"
 
 # The spec's working directory, not the session's: a subagent shell starts in
 # the session cwd, and --cd "$(pwd)" would aim codex's writes at the wrong tree.
@@ -94,7 +100,7 @@ LANE=<literal path from step 1>; LANE_SH=<literal path from step 1>
 "$LANE_SH" deadline "$LANE" || { "$LANE_SH" kill "$LANE"; echo "deadline kill"; }
 ```
 
-Repeat until `wait` prints `READY`. A run still going at 40 minutes is not a problem; interrupting it is. Never `pkill -f` or `pgrep -f` the lane path yourself: the poll call carries the path in its own command line, so the pattern matches and kills the calling shell. The script kills by pid and process group only.
+Repeat until `wait` prints `READY`. A run still going at 40 minutes is not a problem; interrupting it is. `status` prints `last_output_age` (seconds since codex last wrote to `stdout.log` or `progress.md`) and `progress_lines`. A live run with `rc=none` and `last_output_age` above 900 on two consecutive polls is stuck, not slow: `lane.sh kill` it and classify as `timeout`. Never `pkill -f` or `pgrep -f` the lane path yourself: the poll call carries the path in its own command line, so the pattern matches and kills the calling shell. The script kills by pid and process group only.
 
 Flag discipline:
 
@@ -124,7 +130,7 @@ If the spec depends on one of these and you cannot satisfy it, that is `STATUS: 
 **Sandbox denial.** On some hosts codex's sandbox setup helper fails to grant the workspace write ACE and caches the failure: every run ends with codex reporting the workspace as read-only or write approval disabled, and `git status` shows nothing. Return `STATUS: unavailable` with `REASON: sandbox denied writes`, the exact codex message, and the remediation hints (one elevated codex run so the ACE grant completes; clear `~/.codex/.sandbox`; or, if the operator accepts unsandboxed codex, `/fable-advisor:setup-dangerous-yolo-codex`). Never add a `--sandbox` flag to get past it and never retry silently.
 
 3. **Classify the run before verifying.** `RC=$(cat "$LANE/rc")`.
-   - `RC` 124 or 137, or you killed it at the deadline: `STATUS: timeout`. `$LANE/final.txt` is normally absent then; that is the cap, not a separate defect. Inventory the diff and run the verification as for a complete run; a finished diff that passes is still reported as `timeout`, and the architect decides whether to keep it.
+   - `RC` 124 or 137, or you killed it at the deadline: `STATUS: timeout`. `$LANE/final.txt` is normally absent then; that is the cap, not a separate defect. Read `$LANE/progress.md` (codex's own milestone log; it survives the cap) and summarize it on the `PROGRESS` line so the architect knows which steps codex finished and which verification it never reached. Inventory the diff and run the verification as for a complete run; a finished diff that passes is still reported as `timeout`, and the architect decides whether to keep it.
    - `RC` any other non-zero: `STATUS: execution-error` with the exit code and the exact `$LANE/stderr.log` text. Do not retry. Never infer authentication from an exit code alone.
    - `RC` 0 but `$LANE/stderr.log` or `$LANE/final.txt` contains `failed to read code-mode host message`, `failed to decode code-mode IPC frame`, or `code_mode_host_duration_ns`: every tool call inside the run failed. `STATUS: unavailable`, `REASON: likely codex CLI/helper version mismatch` plus the exact line; include `command -v codex`, `readlink -f "$(command -v codex)"`, `codex --version`, and `command -v codex-code-mode-host` (with its `readlink -f` when present) as `DIAGNOSTICS`; those are for the report, never gate on the install layout (the npm launcher resolves `bin/codex.js` differently from a native install). Do not retry.
    - `RC` 0, empty diff, and `$LANE/final.txt` or `$LANE/stderr.log` says the workspace is read-only or write approval is disabled: the sandbox-denial signature above (`unavailable`), not `refused`.
@@ -132,6 +138,8 @@ If the spec depends on one of these and you cannot satisfy it, that is `STATUS: 
    - `RC` 0 and an empty diff otherwise: `STATUS: refused`, quoting the final message verbatim in `REASON`.
 
 4. **Verify independently.** Read the diff scoped to the spec's files (`git status --porcelain -- <paths>`, `git diff -- <paths>`), run the spec's verification yourself, and read `$LANE/final.txt`. Codex's claim of success is not evidence; your re-run is.
+   - Re-run the spec's verification commands once. Do not replay codex's exploratory commands whose output `$LANE/final.txt` already quotes; the re-run of the named commands is the evidence.
+   - **A failure may not be yours.** When a verification fails, check whether the failing assertions read files on the `Other work in flight` line before reporting. Failures whose cause is another lane's in-flight text or code go on the `CONCURRENT NOISE` line with the assertion name and the foreign file, separate from failures in the spec's own files; never fix or revert the foreign change.
    - **Other work in flight is not yours to judge.** `git status` will show files outside the spec from parallel lanes and the architect. List those paths on the `OTHER WORK` line, uninspected; never describe them as unauthorized, revert them, or attribute them to codex unless a spec file's diff references them.
    - **Every touched file must have been parsed by something you ran.** When the spec's verification did not compile or parse a touched file, run the check that does (the package's full compile or typecheck, `go build ./...`, `cargo check`, a byte-compile, the linter) and say in `VERIFIED` which command covered which file. A spec that names no such command is a `GAPS` item, not a reason to skip the check.
 
@@ -154,6 +162,8 @@ OBJECTIVE: [restated in one line]
 CHANGES: [file — one-line summary, per file, from the actual diff]
 VERIFIED: [verification command(s) you re-ran — actual output evidence; which command parsed each touched file]
 OTHER WORK: [dirty paths outside the spec's files, listed and not inspected, or "none"]
+CONCURRENT NOISE: [only when a verification failure traces to another lane's in-flight files: assertion, foreign file, evidence]
+PROGRESS: [only on timeout: milestones from $LANE/progress.md, and the first verification step codex never reached]
 CODEX SAID: [one-line summary of codex's final message; note any disagreement with the diff]
 OBJECTIONS: [only when contested: one line per defect — spec said X, tree shows Y — or the verbatim codex line]
 DIAGNOSTICS: [only on the IPC-mismatch case, or a kept lane path]
