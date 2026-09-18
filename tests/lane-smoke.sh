@@ -8,6 +8,7 @@ LANE2=
 LANE3=
 LANE4=
 LANE5=
+LANE6=
 BAD=
 SECRET=
 SECRET_MULTI=
@@ -28,7 +29,7 @@ esac
 
 cleanup() {
     local lane
-    for lane in "$LANE" "$LANE2" "$LANE3" "$LANE4" "$LANE5"; do
+    for lane in "$LANE" "$LANE2" "$LANE3" "$LANE4" "$LANE5" "$LANE6"; do
         if [ -n "$lane" ] && [ -d "$lane" ]; then
             "$SCRIPT" kill "$lane" >/dev/null 2>&1 || true
             "$SCRIPT" rm "$lane" >/dev/null 2>&1 || true
@@ -396,6 +397,22 @@ check 34 'init sends gc output to stderr' grep -q "gc removed $GC_INIT_OLD" "$GC
 
 USAGE_OUTPUT=$("$SCRIPT" --help 2>&1 || true)
 check 35 'usage lists gc' grep -q '  gc \[hours\]' <<<"$USAGE_OUTPUT"
+check 42 'usage lists stage-upload' grep -q '  stage-upload <lane-dir> <file>...' <<<"$USAGE_OUTPUT"
+UPLOAD_SRC=$(mktemp "${TMPDIR:-/tmp}/lane-smoke-upload.XXXXXX")
+printf 'knowledge\n' > "$UPLOAD_SRC"
+LANE6=$("$SCRIPT" init lane-smoke-lane)
+STAGED=$("$SCRIPT" stage-upload "$LANE6" "$UPLOAD_SRC")
+check 43 'stage-upload copies the file into the lane uploads dir' test "$STAGED" = "$LANE6/uploads/${UPLOAD_SRC##*/}" -a -f "$STAGED"
+check 44 'stage-upload keeps the content' grep -qx 'knowledge' "$STAGED"
+STAGE_DUP_RC=0
+"$SCRIPT" stage-upload "$LANE6" "$UPLOAD_SRC" >/dev/null 2>&1 || STAGE_DUP_RC=$?
+check 45 'stage-upload refuses to overwrite a staged file' test "$STAGE_DUP_RC" -eq 2
+STAGE_MISSING_RC=0
+"$SCRIPT" stage-upload "$LANE6" "$UPLOAD_SRC.missing" >/dev/null 2>&1 || STAGE_MISSING_RC=$?
+check 46 'stage-upload refuses a missing file' test "$STAGE_MISSING_RC" -eq 2
+rm -f -- "$UPLOAD_SRC"
+"$SCRIPT" rm "$LANE6" >/dev/null 2>&1 || true
+LANE6=
 check 36 'lane cap is 5340 seconds' grep -qx 'CAP=5340' "$SCRIPT"
 check 37 'lane deadline is 5400 seconds' grep -qx 'DEADLINE=5400' "$SCRIPT"
 

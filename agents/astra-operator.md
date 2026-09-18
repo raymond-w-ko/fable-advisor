@@ -48,6 +48,14 @@ LANE_SH="${CLAUDE_PLUGIN_ROOT:-}/scripts/lane.sh"
 [ -x "$LANE_SH" ] || { echo "lane.sh not found; plugin install is incomplete"; exit 2; }
 LANE=$("$LANE_SH" init astra-lane)
 
+# Upload staging: Playwright MCP opens files only under its allowed roots (the
+# lane dir and its .playwright-mcp dir), so every file the brief names for a
+# file input is copied into $LANE/uploads first and the prompt names the copy.
+# Run this BEFORE writing the prompt so the Task section carries the staged
+# paths; a prompt that names the brief's original path makes the upload fail.
+UPLOADS="<paths from the brief's Uploads line, or empty>"
+[ -n "$UPLOADS" ] && "$LANE_SH" stage-upload "$LANE" $UPLOADS
+
 cat >> "$LANE/stdin" << 'PROMPT_EOF'
 This task runs in a dedicated browser lane on the model named in the invocation.
 That was chosen deliberately; nothing has been substituted. If a user-level or
@@ -71,6 +79,9 @@ do nothing in this headless context. Report a reload as done only when the
 navigation tool ran.
 
 Permitted mutations: <what the task may change; "none" otherwise>.
+Uploads: <for each file to upload through a file input, its staged path under
+$LANE/uploads, or "none". Use the file chooser tool with that exact path;
+never paste the file's text in place of an upload unless the brief allows it.>
 Login: <the authorized flow, or "none". When a credential is authorized, the lane
 appends it at the very end of this prompt; type it only into the field it belongs
 to and never repeat it in your final message. Never type a credential that is not
@@ -158,6 +169,7 @@ Cookies and localStorage live in the isolated context of one invocation. A flow 
 ## Login, secrets, evidence
 
 - **The standard secret path is a file.** The caller writes one credential to a 0600 file outside any repository (on Windows, an owner-only ACL: `icacls <file> /inheritance:r /grant:r "%USERNAME%:F"`) and names its path in the brief; the lane splices it with `lane.sh splice-secret` at build time (step 1) and scrubs it with `lane.sh scrub` before evidence check (Cleanup), leaving `events.redacted.log` for that check. Never put a password, verification code, cookie, or bearer token in the prompt as text you typed, in a CLI argument, in the report, or in a screenshot, and never print or `Read` the credential file. The lane never redacts files by hand. A brief that pastes a credential as plain text is `contested`; a brief whose flow needs one and supplies none is `unavailable` with `REASON: credential required, none supplied`. Never keep a screenshot of a filled secret field.
+- **Uploads are staged, not referenced.** The browser's file chooser only accepts paths under the lane's allowed roots. Copy every file the brief names for upload with `lane.sh stage-upload` before writing the prompt, name the staged copy in the prompt, and report the original path plus the staged path in `STEPS`. A brief that names an upload file that does not exist is `contested`.
 - A page that loads without login proves nothing about authenticated behaviour. Say which parts of the flow ran authenticated.
 - Screenshots go only to `$LANE/shots`. The caller decides whether any of them are safe to share further; you list paths, you do not upload.
 

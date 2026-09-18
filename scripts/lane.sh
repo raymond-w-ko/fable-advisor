@@ -26,6 +26,7 @@ usage() {
         '  kill <lane-dir>' \
         '  deadline <lane-dir> [seconds]' \
         '  splice-secret <lane-dir> <secret-file>' \
+        '  stage-upload <lane-dir> <file>...' \
         '  scrub <lane-dir>' \
         '  rm <lane-dir>' >&2
 }
@@ -268,7 +269,7 @@ cmd_init() {
     local lane
     (cmd_gc 24 >&2) || true
     lane=$(mktemp -d "${TMPDIR:-/tmp}/$1.XXXXXX") || fail 'mktemp failed'
-    mkdir -p "$lane/shots"
+    mkdir -p "$lane/shots" "$lane/uploads"
     : >> "$lane/.lane-marker"
     # umask is a no-op on Windows; %TEMP% is already owner-scoped by ACL.
     host_path "$lane"
@@ -468,6 +469,26 @@ cmd_splice_secret() {
     printf '%s\n' "$secret" >> "$lane/secret-path"
 }
 
+# Playwright MCP only opens files under its allowed roots (the lane dir and its
+# .playwright-mcp dir), so a brief's upload files are copied into the lane
+# first; the copy keeps the basename and is what the prompt names.
+cmd_stage_upload() {
+    [ "$#" -ge 2 ] || fail 'stage-upload requires lane directory and at least one file'
+    local lane=$1 file base target
+    shift
+    require_lane "$lane"
+    mkdir -p "$lane/uploads"
+    for file in "$@"; do
+        [ -f "$file" ] || fail "upload file missing: $file"
+        base=${file##*/}
+        target="$lane/uploads/$base"
+        [ -e "$target" ] && fail "upload already staged: $target"
+        cp -- "$file" "$target"
+        chmod 600 "$target" 2>/dev/null || true
+        host_path "$target"
+    done
+}
+
 cmd_scrub() {
     [ "$#" -eq 1 ] || fail 'scrub requires lane directory'
     local lane=$1
@@ -585,6 +606,7 @@ case "$command" in
     kill) cmd_kill "$@" ;;
     deadline) cmd_deadline "$@" ;;
     splice-secret) cmd_splice_secret "$@" ;;
+    stage-upload) cmd_stage_upload "$@" ;;
     scrub) cmd_scrub "$@" ;;
     rm) cmd_rm "$@" ;;
     gc) cmd_gc "$@" ;;
