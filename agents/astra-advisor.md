@@ -17,12 +17,22 @@ First, always:
 command -v codex && codex --version
 ```
 
+```bash
+LANE_SH="${CLAUDE_PLUGIN_ROOT:-}/scripts/lane.sh"
+[ -x "$LANE_SH" ] || LANE_SH=$(ls -d "$HOME"/.claude/plugins/cache/fable-advisor/fable-advisor/*/scripts/lane.sh 2>/dev/null | sort -V | tail -1)
+[ -x "$LANE_SH" ] || LANE_SH="$HOME/.claude/plugins/marketplaces/fable-advisor/scripts/lane.sh"
+[ -x "$LANE_SH" ] || { echo "lane.sh not found; plugin install is incomplete"; exit 2; }
+"$LANE_SH" preflight
+```
+
+If it exits non-zero, **stop** and return `STATUS: unavailable` with `REASON: GNU timeout not found on PATH — <paste the script's install lines verbatim>`; the fix is on the host, not in the lane.
+
 If codex is missing or not authenticated, or the invocation reports that `gpt-6-astra` is unavailable, **stop** and return:
 
 ```
 ASTRA VERDICT
 STATUS: unavailable
-REASON: [codex not found | auth error — exact message | model gpt-6-astra unavailable — exact message]
+REASON: [codex not found | auth error — exact message | model gpt-6-astra unavailable — exact message | GNU timeout not found — install lines]
 ```
 
 You never answer the question yourself as a fallback.

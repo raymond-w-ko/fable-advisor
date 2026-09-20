@@ -15,6 +15,19 @@ First, always:
 
 ```bash
 command -v codex && codex --version
+```
+
+```bash
+LANE_SH="${CLAUDE_PLUGIN_ROOT:-}/scripts/lane.sh"
+[ -x "$LANE_SH" ] || LANE_SH=$(ls -d "$HOME"/.claude/plugins/cache/fable-advisor/fable-advisor/*/scripts/lane.sh 2>/dev/null | sort -V | tail -1)
+[ -x "$LANE_SH" ] || LANE_SH="$HOME/.claude/plugins/marketplaces/fable-advisor/scripts/lane.sh"
+[ -x "$LANE_SH" ] || { echo "lane.sh not found; plugin install is incomplete"; exit 2; }
+"$LANE_SH" preflight
+```
+
+If it exits non-zero, **stop** and return `STATUS: unavailable` with `REASON: GNU timeout not found on PATH — <paste the script's install lines verbatim>`; the fix is on the host, not in the lane.
+
+```bash
 awk '/^[[:space:]]*\[/ { exit } /^[[:space:]]*sandbox_mode[[:space:]]*=/ { print }' "${CODEX_HOME:-$HOME/.codex}/config.toml"
 ```
 
@@ -23,7 +36,7 @@ If codex is not installed or not authenticated, or the invocation reports that `
 ```
 CODEX REPORT
 STATUS: unavailable
-REASON: [codex not found on PATH | auth error — exact message | model access error — exact message]
+REASON: [codex not found on PATH | auth error — exact message | model access error — exact message | GNU timeout not found — install lines]
 ```
 
 If the `sandbox_mode` line prints nothing or prints `read-only`, **stop** with `STATUS: unavailable` and `REASON: sandbox_mode not set to workspace-write or danger-full-access in ~/.codex/config.toml (codex exec defaults to read-only)`. This lane passes no `--sandbox` flag; the operator sets the posture once, by writing `sandbox_mode = "workspace-write"` or by typing `/fable-advisor:setup-dangerous-yolo-codex` themselves. Never suggest that the architect invoke that skill.
@@ -112,7 +125,7 @@ Flag discipline:
 | `-` | Prompt via stdin; `lane.sh launch` feeds `$LANE/stdin`. No quoting hazards, no truncated specs. |
 | `--model gpt-5.6-luna` | The capability tier. If the spec names a different codex model, use that. |
 
-`lane.sh launch` applies the cap when a GNU `timeout`/`gtimeout` exists (macOS needs `brew install coreutils`; Git Bash ships it) and warns to stderr and runs uncapped otherwise. `rc 124` or `137` means the cap or the deadline kill fired. Codex's progress is in `$LANE/stdout.log`, stderr in `$LANE/stderr.log`.
+The cap always applies because `lane.sh launch` refuses to start without GNU `timeout`/`gtimeout`; `lane.sh preflight` reports the missing tool with install suggestions (Homebrew `brew install coreutils` by default, `pkgs.coreutils-prefixed` on nix-darwin; Git Bash ships it). `rc 124` or `137` means the cap or the deadline kill fired. Codex's progress is in `$LANE/stdout.log`, stderr in `$LANE/stderr.log`.
 
 ### Sandbox preconditions
 

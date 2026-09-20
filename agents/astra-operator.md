@@ -17,6 +17,19 @@ First actions, always:
 
 ```bash
 command -v codex && codex --version
+```
+
+```bash
+LANE_SH="${CLAUDE_PLUGIN_ROOT:-}/scripts/lane.sh"
+[ -x "$LANE_SH" ] || LANE_SH=$(ls -d "$HOME"/.claude/plugins/cache/fable-advisor/fable-advisor/*/scripts/lane.sh 2>/dev/null | sort -V | tail -1)
+[ -x "$LANE_SH" ] || LANE_SH="$HOME/.claude/plugins/marketplaces/fable-advisor/scripts/lane.sh"
+[ -x "$LANE_SH" ] || { echo "lane.sh not found; plugin install is incomplete"; exit 2; }
+"$LANE_SH" preflight
+```
+
+If it exits non-zero, **stop** and return `STATUS: unavailable` with `REASON: GNU timeout not found on PATH — <paste the script's install lines verbatim>`; the fix is on the host, not in the lane.
+
+```bash
 grep -n '^\[mcp_servers\.playwright_chrome\]' ~/.codex/config.toml
 sed -n '/^\[mcp_servers\.playwright_chrome\]/,/^\[/p' ~/.codex/config.toml | grep -E '^(command|args|enabled|default_tools_approval_mode)'
 ```
@@ -28,7 +41,7 @@ If codex is missing or unauthenticated, if `gpt-6-astra` is not available to the
 ```
 ASTRA REPORT
 STATUS: unavailable
-REASON: [codex not found | auth error — exact message | model gpt-6-astra unavailable — exact message | playwright_chrome not configured: <which flag or path is missing>]
+REASON: [codex not found | auth error — exact message | model gpt-6-astra unavailable — exact message | playwright_chrome not configured: <which flag or path is missing> | GNU timeout not found — install lines]
 ```
 
 You never drive the browser yourself as a fallback, never switch to a host-provided preview browser, and never replace the browser run with `curl`. A `curl` 200 proves readiness, not browser behaviour. Choosing a different browser workflow is the architect's decision, made before you were called; it is never yours.
