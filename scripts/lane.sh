@@ -20,6 +20,7 @@ usage() {
         'Subcommands:' \
         '  init <prefix>' \
         '  gc [hours]' \
+        '  preflight' \
         '  launch <lane-dir> -- <command and args...>' \
         '  wait <lane-dir> [seconds]' \
         '  status <lane-dir>' \
@@ -56,6 +57,21 @@ find_gnu_timeout() {
         fi
     done
     printf '\n'
+}
+
+timeout_help() {
+    printf '%s\n' \
+        'GNU timeout not found on PATH; the lane cap requires it.' \
+        '  macOS (Homebrew):          brew install coreutils          # installs gtimeout' \
+        '  macOS (nix-darwin / HM):   pkgs.coreutils-prefixed         # installs gtimeout' \
+        "  Linux:                     install your distro's coreutils package" \
+        '  Windows (Git Bash):        ships timeout; run from Git Bash, not cmd or PowerShell' >&2
+}
+
+fail_timeout() {
+    printf 'ERROR: %s\n' "$1" >&2
+    timeout_help
+    exit 2
 }
 
 find_gnu_tail() {
@@ -275,6 +291,18 @@ cmd_init() {
     host_path "$lane"
 }
 
+cmd_preflight() {
+    [ "$#" -eq 0 ] || fail 'preflight takes no arguments'
+    local timeout_bin timeout_path
+    timeout_bin=$(find_gnu_timeout)
+    if [ -n "$timeout_bin" ]; then
+        timeout_path=$(command -v "$timeout_bin")
+        printf 'GNU timeout: %s\n' "$timeout_path"
+        return 0
+    fi
+    fail_timeout 'GNU timeout not found on PATH'
+}
+
 cmd_launch() {
     [ "$#" -ge 3 ] || fail 'launch requires lane directory, --, and command'
     local lane=$1
@@ -289,10 +317,9 @@ cmd_launch() {
     local timeout_bin
     timeout_bin=$(find_gnu_timeout)
     if [ -z "$timeout_bin" ]; then
-        printf '%s\n' 'WARN: no GNU timeout on PATH — run is uncapped (macOS: brew install coreutils)' >&2
-    else
-        set -- "$timeout_bin" -k "$KILL_GRACE" "$CAP" "$@"
+        fail_timeout 'GNU timeout not found on PATH (run: lane.sh preflight)'
     fi
+    set -- "$timeout_bin" -k "$KILL_GRACE" "$CAP" "$@"
 
     # set -m gives detached background subshell its own process group.
     set -m 2>/dev/null || true
@@ -600,6 +627,7 @@ command=$1
 shift
 case "$command" in
     init) cmd_init "$@" ;;
+    preflight) cmd_preflight "$@" ;;
     launch) cmd_launch "$@" ;;
     wait) cmd_wait "$@" ;;
     status) cmd_status "$@" ;;

@@ -9,6 +9,7 @@ LANE3=
 LANE4=
 LANE5=
 LANE6=
+LANE7=
 BAD=
 SECRET=
 SECRET_MULTI=
@@ -21,6 +22,9 @@ GC_NO_MARKER=
 GC_INIT_OLD=
 GC_INIT_LANE=
 GC_INIT_STDERR=
+RESTRICTED_BIN=
+PREFLIGHT_STDERR=
+PREFLIGHT_STDOUT=
 
 case $(uname -s 2>/dev/null) in
     MINGW*|MSYS*|CYGWIN*) IS_MSYS=1 ;;
@@ -29,7 +33,7 @@ esac
 
 cleanup() {
     local lane
-    for lane in "$LANE" "$LANE2" "$LANE3" "$LANE4" "$LANE5" "$LANE6"; do
+    for lane in "$LANE" "$LANE2" "$LANE3" "$LANE4" "$LANE5" "$LANE6" "$LANE7"; do
         if [ -n "$lane" ] && [ -d "$lane" ]; then
             "$SCRIPT" kill "$lane" >/dev/null 2>&1 || true
             "$SCRIPT" rm "$lane" >/dev/null 2>&1 || true
@@ -58,6 +62,9 @@ cleanup() {
     fi
     if [ -n "$SECRET_MULTI" ]; then
         rm -f -- "$SECRET_MULTI"
+    fi
+    if [ -n "$RESTRICTED_BIN" ] && [ -d "$RESTRICTED_BIN" ]; then
+        rm -rf -- "$RESTRICTED_BIN"
     fi
     if [ -n "$TEST_TMPDIR" ] && [ -d "$TEST_TMPDIR" ]; then
         rmdir "$TEST_TMPDIR" 2>/dev/null || true
@@ -354,7 +361,10 @@ SCRUB_OUTPUT=$("$SCRIPT" scrub "$LANE4")
 check 20 'scrub reports secret match counts' check_scrub_counts
 check 21 'scrub removes stdin' test ! -e "$LANE4/stdin"
 check 22 'scrub removes stdout' test ! -e "$LANE4/stdout.log"
-check 23 'scrub withholds matching final' test ! -e "$LANE4/final.txt" && grep -q 'withheld' <<<"$SCRUB_OUTPUT"
+check_scrub_withheld() {
+    [ ! -e "$LANE4/final.txt" ] && grep -q 'withheld' <<<"$SCRUB_OUTPUT"
+}
+check 23 'scrub withholds matching final' check_scrub_withheld
 printf 'safe result\n' >> "$LANE4/final.txt"
 "$SCRIPT" scrub "$LANE4" >/dev/null
 check 24 'scrub keeps non-matching final' test -f "$LANE4/final.txt"
@@ -423,5 +433,35 @@ launch_refuses_reuse() {
     ! "$SCRIPT" launch "$REUSED_LANE" -- true >/dev/null 2>&1
 }
 check 38 'launch refuses a lane that already ran' launch_refuses_reuse
+
+PREFLIGHT_OUTPUT=$($SCRIPT preflight)
+check 47 'preflight reports GNU timeout' grep -q '^GNU timeout: ' <<<"$PREFLIGHT_OUTPUT"
+
+RESTRICTED_BIN=$(mktemp -d "$TEST_TMPDIR/restricted-bin.XXXXXX")
+for tool in bash sh mktemp date cat printf awk sed grep ls kill sleep ps tail gtail dirname basename readlink uname tr wc head cut sort id env rm mkdir chmod cp ln; do
+    tool_path=$(command -v "$tool" 2>/dev/null || true)
+    if [ -n "$tool_path" ]; then
+        ln -s "$tool_path" "$RESTRICTED_BIN/$tool" 2>/dev/null || cp "$tool_path" "$RESTRICTED_BIN/$tool"
+    fi
+done
+PREFLIGHT_STDOUT="$TEST_TMPDIR/preflight.stdout"
+PREFLIGHT_STDERR="$TEST_TMPDIR/preflight.stderr"
+PREFLIGHT_RC=0
+PATH="$RESTRICTED_BIN" "$SCRIPT" preflight >"$PREFLIGHT_STDOUT" 2>"$PREFLIGHT_STDERR" || PREFLIGHT_RC=$?
+check 48 'preflight refuses missing GNU timeout' test "$PREFLIGHT_RC" -eq 2
+check_preflight_guidance() {
+    grep -q 'brew install coreutils' "$PREFLIGHT_STDERR" && grep -q 'coreutils-prefixed' "$PREFLIGHT_STDERR"
+}
+check 49 'preflight gives install guidance' check_preflight_guidance
+
+LANE7=$($SCRIPT init missing-timeout-lane)
+printf '\n' >> "$LANE7/stdin"
+LAUNCH_PREFLIGHT_RC=0
+PATH="$RESTRICTED_BIN" "$SCRIPT" launch "$LANE7" -- sleep 1 >/dev/null 2>"$TEST_TMPDIR/launch.stderr" || LAUNCH_PREFLIGHT_RC=$?
+check 50 'launch refuses missing GNU timeout' test "$LAUNCH_PREFLIGHT_RC" -eq 2
+check_refused_launch_metadata() {
+    [ ! -e "$LANE7/pid" ] && [ ! -e "$LANE7/started" ] && [ ! -e "$LANE7/timeout-bin" ]
+}
+check 51 'refused launch writes no metadata' check_refused_launch_metadata
 
 exit "$FAILURES"
