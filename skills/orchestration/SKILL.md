@@ -34,7 +34,7 @@ What stays with the architect regardless of cost: decomposition, interface desig
 | Documents | Architect writes; lanes render | `codex-implementer` for rendering | Findings and claims are the architect's; rendering them is routine. |
 | Review, same family | Fable 5.1, session effort | `fable-advisor` | Commitment boundaries and the mandatory end-of-deliverable review. Never an implementation lane. |
 | Review, cross-vendor | GPT-6 Astra, effort per consult | `astra-advisor` | Automatic at moderate complexity or above once the Fable review is adjudicated; also on request. Read-only via codex. Requires the codex CLI. |
-| Browser / computer use | GPT-6 Astra, `medium` default | `astra-operator` | Anything that needs a real browser or desktop. Doctrine in the `computer-use` skill. |
+| Browser / computer use | GPT-6 Astra, `medium` default | `astra-operator` | Anything that needs a real browser, an iOS Simulator, or a desktop. Doctrine in the `computer-use` skill; host setup in `playwright-mcp-setup` (browser) and `xcodebuildmcp-setup` (iOS Simulator, macOS only). |
 
 **Implementation routing.** How much does the outcome depend on judgment the spec cannot capture? Little: the Luna lane; you verify anyway. A lot, and mistakes are costly: `sol-implementer`, or keep the piece with the architect. A Luna task that fails its spec once gets a corrected spec; twice, it escalates to Sol, because repetition is evidence the task was misclassified. A `contested` report is not a failure and does not count: the lane stopped because the spec was wrong. A contest you refuted with evidence that the lane still could not act on is a lane failure and does count.
 

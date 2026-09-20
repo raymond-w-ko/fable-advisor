@@ -1,6 +1,6 @@
 ---
 name: computer-use
-description: Doctrine for browser and computer-use work under the architect-as-orchestrator pattern — route every browser task (UI verification, visual checks, screenshots, login flows, drag-and-drop, browser E2E, "use Astra") to the `astra-operator` agent, which runs GPT-6 Astra through Codex with an isolated headless Playwright Chrome MCP server. Covers resolving the real application URL first, writing the browser brief, what counts as browser evidence, secrets in login flows, cleanup, and how the same lane extends to desktop computer use. USE WHEN a task needs a real browser or desktop interaction, when verifying a UI change, when the user says "use Astra", or when deciding whether a shell probe or a host preview browser is an acceptable substitute (it is not, unless the user chose it).
+description: Doctrine for browser, iOS Simulator, and computer-use work under the architect-as-orchestrator pattern — route every browser task (UI verification, visual checks, screenshots, login flows, drag-and-drop, browser E2E, "use Astra") and every iOS Simulator task (drive an installed app by accessibility snapshot and taps, return screenshots) to the `astra-operator` agent, which runs GPT-6 Astra through Codex with an isolated headless Playwright Chrome MCP server or, on macOS, the XcodeBuildMCP server. Covers resolving the real application URL or simulator first, writing the brief, what counts as evidence, secrets in login flows, cleanup, and how the same lane extends to desktop computer use. USE WHEN a task needs a real browser, simulator, or desktop interaction, when verifying a UI change, when the user says "use Astra", or when deciding whether a shell probe or a host preview browser is an acceptable substitute (it is not, unless the user chose it).
 ---
 
 # Computer use — the browser lane doctrine
@@ -14,6 +14,7 @@ The session is the architect. It does not drive a browser itself, and it does no
 - Login flows, session persistence, anything that depends on cookies, TLS, secure-context APIs, or WebSockets.
 - Drag-and-drop, keyboard navigation, file pickers, and other interactions that DOM-level tests fake.
 - Browser end-to-end runs that are not (yet) a checked-in deterministic suite.
+- Verifying a mobile change in the iOS Simulator: launching the installed app, driving a flow, and returning screenshots as evidence (see "iOS Simulator briefs").
 - The user says "use Astra".
 
 Do not route here for checked-in deterministic browser suites: those run their own Playwright scripts directly, in CI and locally, and must not invoke a model. The lane is for interactive verification.
@@ -23,8 +24,9 @@ Do not route here for checked-in deterministic browser suites: those run their o
 | Lane | Producer | Invoke | Notes |
 |---|---|---|---|
 | Browser / computer use | GPT-6 Astra (effort `medium` by default) | `astra-operator` agent | Standalone `codex exec` with the `playwright_chrome` MCP server enabled for that run only. Headless, isolated context, no desktop session needed. Requires the codex CLI and a configured browser server. |
+| iOS Simulator | GPT-6 Astra (effort `medium` by default) | `astra-operator` agent, iOS Simulator mode | Standalone `codex exec` with the `xcodebuildmcp` MCP server enabled for that run only. macOS host with Xcode; the app is already built and installed on a named simulator. Requires the codex CLI and a configured `xcodebuildmcp` server (`xcodebuildmcp-setup` skill). |
 
-The lane never substitutes. If it returns `unavailable`, the fix is on the host (codex login, `playwright_chrome` config, installed browser), not a different model; for the `playwright_chrome` config and browser, run the `playwright-mcp-setup` skill. A host-provided preview browser (an IDE or agent-host tab you can drive from the session) is an alternative only when the user explicitly chooses it; it runs on whatever client is connected, its `localhost` is not necessarily the shell host, and its evidence lives in a different place. Say which workflow ran.
+The lane never substitutes. If it returns `unavailable`, the fix is on the host (codex login, `playwright_chrome` or `xcodebuildmcp` config, installed browser or Xcode), not a different model; for the `playwright_chrome` config and browser, run the `playwright-mcp-setup` skill; for the simulator server, `xcodebuildmcp-setup`. A host-provided preview browser (an IDE or agent-host tab you can drive from the session) is an alternative only when the user explicitly chooses it; it runs on whatever client is connected, its `localhost` is not necessarily the shell host, and its evidence lives in a different place. Say which workflow ran.
 
 ## Resolve the application first — architect work
 
@@ -75,6 +77,18 @@ Navigation alone, an HTTP 200, or an exit-zero worker are not evidence of the re
 - `--ephemeral` does not guarantee zero config changes: recent Codex versions persist a project-trust entry for the run's working directory. The operator removes only an exact task-created entry and preserves the rest.
 - The operator removes its lane dir when it reports and copies the evidence (redacted events, final message, screenshots) to the path the brief names or to a `${TMPDIR:-/tmp}/astra-evidence.<random>` dir listed in `CLEANUP`. That dir is the architect's to delete once the evidence has been read; `lane.sh gc` does not touch it. Evidence is never committed and never uploaded implicitly.
 - If the task created a test stack or a test worktree, the project's own cleanup policy applies after the report.
+
+## iOS Simulator briefs
+
+The simulator is the mobile equivalent of the browser: the operator drives the installed app through XcodeBuildMCP's accessibility snapshot, taps, and typing, and returns screenshots. What changes for the architect:
+
+- **Build and install first, outside the lane.** The lane's shell is sandboxed and its network is off; `xcodebuild`, pod installs, Metro, and the project's own client-build helper run from the session or an implementation lane before the brief exists. The brief names the result: `Simulator: <UDID>` (one explicit UDID from `xcrun simctl list devices`, never a device name), `Bundle: <bundle id>`, and how to launch (`launch_app_sim`, or a dev-client URL to open when the app loads its bundle from a running Metro). A brief without an installed app on that UDID comes back `contested`.
+- **Steps name accessibility labels, not coordinates.** XcodeBuildMCP taps element references from `snapshot_ui`; a step that says "tap at 120,480" cannot be verified and usually cannot be performed. If the app exposes no label for a control, that is a finding about the app, and the brief says what to do instead (a deep link the app registers, or stop and report).
+- **Evidence is a screenshot sequence plus one full-resolution capture.** The tool screenshots are downscaled JPEGs, enough to read a screen and judge a flow; the operator adds one full-resolution `simctl` capture of the final state, and a video when the brief asks. Ask for the full capture by name when the check is about layout or pixel alignment, and compare it against the device's point size yourself.
+- **State that persists.** The simulator keeps the app's data between runs. Say in the brief whether a fresh install, a `stop_app_sim`, or a specific starting state is required, and who provides it; the operator does not erase simulators.
+- **Reasoning.** `REASONING: medium` as for the browser; `high` for long multi-screen flows where the accessibility tree is noisy.
+
+Host setup is the `xcodebuildmcp-setup` skill. The operator's `iOS Simulator mode` section carries the prompt, the flags, and the evidence checks.
 
 ## Beyond the browser: desktop computer use
 
