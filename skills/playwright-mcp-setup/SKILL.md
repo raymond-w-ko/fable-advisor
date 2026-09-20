@@ -1,6 +1,6 @@
 ---
 name: playwright-mcp-setup
-description: Install and register the headless Playwright Chrome MCP server that the `astra-operator` browser lane requires, on Linux, macOS, or Git Bash on Windows. Runs `scripts/setup-playwright-mcp.sh`, which discovers node, npm's global root, `@playwright/mcp`, and Playwright's Chromium on the host (nothing hard-coded), writes `[mcp_servers.playwright_chrome]` to `~/.codex/config.toml` with a backup, and proves the server answers an MCP handshake. USE WHEN `astra-operator` returns `STATUS: unavailable` with `playwright_chrome not configured`, when the user asks to set up Playwright MCP or the browser lane for Codex, when checking whether the browser lane is ready on a new machine, or when a Windows host needs the node-not-npx launcher form.
+description: Install and register the headless Playwright Chrome MCP server that the `astra-operator` browser lane requires, on Linux, macOS, or Git Bash on Windows. Runs `scripts/setup-playwright-mcp.sh`, which first discovers a packaged launcher and otherwise discovers node, npm's global root, `@playwright/mcp`, and Playwright's Chromium on the host (nothing hard-coded), writes `[mcp_servers.playwright_chrome]` to `~/.codex/config.toml` with a backup, and proves the server answers an MCP handshake. USE WHEN `astra-operator` returns `STATUS: unavailable` with `playwright_chrome not configured`, when the user asks to set up Playwright MCP or the browser lane for Codex, when checking whether the browser lane is ready on a new machine, or when a Windows host needs the node-not-npx launcher form.
 ---
 
 # Playwright MCP setup — make the browser lane available
@@ -32,16 +32,29 @@ Exit codes:
 | 2 | usage error | Fix the arguments. |
 | 3 | `[mcp_servers.playwright_chrome]` already exists | Show the user the printed block. Rerun with `--force` only if they want it replaced; the old file is backed up next to it as `config.toml.bak.<timestamp>`. |
 
-Flags: `--force` replaces an existing block, `--skip-browser` skips `playwright install chromium`, `--name <name>` registers under another server name (the lane expects `playwright_chrome`; use another name only when the user says so).
+Flags: `--force` replaces an existing block, `--skip-browser` skips `playwright install chromium`, `--launcher <path>` selects an explicit packaged MCP launcher, and `--name <name>` registers under another server name (the lane expects `playwright_chrome`; use another name only when the user says so).
 
 ## What the script discovers
 
-- `node` on PATH, version 18 or later. On Windows the config gets the `C:/...` form of the path.
+- A packaged launcher first: `playwright-mcp` or `mcp-server-playwright` on PATH, or the path passed with `--launcher`. This route does not need `node` or `npm`, and downloads nothing: a packaged launcher is expected to bring its own Playwright and Chromium (the nixpkgs package does, through `PLAYWRIGHT_BROWSERS_PATH`). The handshake proves the server answers `tools/list`; it does not launch the browser, so a launcher whose browser is broken passes `--check` and fails on the first `browser_navigate` in a lane run.
+- Otherwise, `node` on PATH, version 18 or later. On Windows the config gets the `C:/...` form of the path.
 - `npm root -g`, then `@playwright/mcp/cli.js` under it. Installs the package globally when absent.
 - `playwright-core/cli.js` wherever npm hoisted it, then `install chromium` through it. Idempotent.
 - `codex` on PATH and `${CODEX_HOME:-~/.codex}/config.toml`.
 
-It writes this shape, with the discovered paths:
+For the packaged route, it writes this shape:
+
+```toml
+[mcp_servers.playwright_chrome]
+command = "<playwright-mcp>"
+args = ["--headless", "--isolated"]
+enabled = false
+default_tools_approval_mode = "approve"
+startup_timeout_sec = 60
+tool_timeout_sec = 120
+```
+
+For the npm route, it writes this shape, with the discovered paths:
 
 ```toml
 [mcp_servers.playwright_chrome]
@@ -57,14 +70,20 @@ tool_timeout_sec = 120
 
 `default_tools_approval_mode = "approve"` is what makes the lane work at all on Codex 0.153 and later: every MCP tool call is an approval request there, and the lane runs with `approval_policy="never"`, which auto-rejects instead of asking. The symptom without it is a run that ends rc=0 with `MCP tool call requires approval, but approval policy is never` in the events and no navigation. `auto` does not help because the Playwright tools carry no read-only annotations. The `astra-operator` agent also passes the same key with `-c` per run, so an older block written by hand still works once the agent is current.
 
+## NixOS and other read-only npm roots
+
+Install the nixpkgs `playwright-mcp` package in `environment.systemPackages` or `home.packages`, then run the script. The package bundles a store-patched Chromium through `PLAYWRIGHT_BROWSERS_PATH`. The block's `command` is the `/run/current-system/sw/bin/playwright-mcp` (or `~/.nix-profile/bin/...`) path, which stays stable across rebuilds.
+
 ## Why node plus cli.js, not npx
 
 On Windows, `npx` is `npx.cmd`, a batch wrapper. Spawned as a stdio MCP server it deadlocks on piped stdin even with `-y`, and `cmd /c npx` loses the pipes entirely. Launching `node` on the package's `cli.js` avoids both. The same form works on Linux and macOS, so the script uses it everywhere; do not rewrite the block to `npx`.
 
+The packaged route launches the binary directly, so it has no `npx` wrapper problem.
+
 ## Verification the script performs
 
 1. `codex mcp get playwright_chrome` parses the block.
-2. A stdio handshake (`initialize`, `notifications/initialized`, `tools/list`) against the exact command and args in the block must list `browser_navigate`.
+2. A stdio handshake (`initialize`, `notifications/initialized`, `tools/list`) against the exact command and args in the block must list `browser_navigate`. `--check` also runs this handshake when it finds a launcher, and reports `MISSING:` when an existing block's `command` differs from the launcher it discovered (a block written before a packaged launcher appeared on the host), or whose `args` line differs from the one the script would write (a hand-edited block with different spacing counts as a mismatch); rerun without `--check` and with `--force` to rewrite it.
 
 For a full end-to-end check, run the `astra-operator` agent with a brief against a URL the user authorizes, for example a public page or a local dev server, and confirm it returns screenshots from `$LANE/shots`. Do that only when the user wants the cost of a GPT-6 Astra run.
 

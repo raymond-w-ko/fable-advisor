@@ -2,7 +2,7 @@
 
 **Fable 5.1 runs the show. Codex does the typing (Luna for routine work, Sol for the hard one-offs, each at the effort the task deserves), Astra drives the browser, and Fable reviews before anything ships.**
 
-> **This is a personal fork** of [DannyMac180/fable-advisor](https://github.com/DannyMac180/fable-advisor) (`upstream`). It adds the detached lane runner (`scripts/lane.sh`), the `astra-operator` browser lane with its `computer-use` skill, the `data-investigator` and `astra-advisor` lanes, and the operator-owned sandbox posture. Install from this repository (`origin`), not upstream.
+> **This is a personal fork** of [DannyMac180/fable-advisor](https://github.com/DannyMac180/fable-advisor) (`upstream`). It adds the detached lane runner (`scripts/lane.sh`), the `astra-operator` browser lane with its `computer-use` skill, the `data-investigator`, `astra-advisor`, and `fable-frontend` lanes, and the operator-owned sandbox posture. Install from this repository (`origin`), not upstream.
 
 <a href="https://github.com/DannyMac180/fable-advisor/raw/main/assets/fable-advisor-demo.mp4"><img src="assets/fable-advisor-demo-poster.png" alt="30-second demo: Fable 5.1 orchestrates, GPT-5.6 Luna implements, Fable 5.1 reviews" width="100%"></a>
 
@@ -14,6 +14,7 @@ Claude Code lets every subagent run on a different model, and lets the session r
 |---|---|---|---|
 | Routine | **GPT-5.6 Luna** | `codex-implementer` agent (default) | The spec fully determines the outcome; Codex does the typing via the [Codex CLI](https://github.com/openai/codex) |
 | High-complexity | **GPT-5.6 Sol** | `sol-implementer` agent | One-off tasks where judgment the spec cannot capture decides the outcome: subtle concurrency, hard debugging, security-sensitive paths, wide refactors |
+| Frontend | **Fable 5.1** | `fable-frontend` agent | User-interface code (markup, styles, client-side behavior, charts, tooltips, accessibility) in a clean context: the outcome is judged by what a person sees, which a spec carries poorly and the codex lanes have repeatedly missed; proven by an `astra-operator` browser run and reviewed cross-vendor by `astra-advisor` |
 | Review | **Fable 5.1** | `fable-advisor` agent | Commitment boundaries, and **always once at the end**: the advisor reviews the accumulated changes before the architect reports done |
 | Review, cross-vendor | **GPT-6 Astra** | `astra-advisor` agent | An independent-family second opinion on a decision, diff, or findings document, read-only, after the Fable review on any deliverable of moderate complexity or above |
 | Browser / computer use | **GPT-6 Astra** | `astra-operator` agent | Anything that needs a real browser: UI verification, screenshots, login flows, drag-and-drop, browser E2E, through an isolated headless Playwright Chrome |
@@ -21,7 +22,7 @@ Claude Code lets every subagent run on a different model, and lets the session r
 
 **Effort is chosen per task.** The architect names `REASONING: low … max` (and `ultra` on Sol) in each spec and every codex lane passes it through; Luna defaults to `high` when the line is missing. The session and the Fable advisor run at whatever `/effort` you set.
 
-Tokens route by capability: Fable emits judgment and specs, the cross-vendor lanes emit the code, and the premium is spent where it changes outcomes: the architecture and the final review. Both implementation lanes are a different model family than the architect, so cross-vendor review is built into the routing. For high-stakes work, run `codex-implementer` and `sol-implementer` on the same spec and let the architect pick the stronger diff.
+Tokens route by capability: Fable emits judgment and specs, the cross-vendor lanes emit the code, and the premium is spent where it changes outcomes: the architecture and the final review. The codex implementation lanes are a different model family than the architect, so cross-vendor review is built into the routing; the `fable-frontend` lane is the one same-family exception and gets its independent check from `astra-advisor` and the browser run. For high-stakes work, run `codex-implementer` and `sol-implementer` on the same spec and let the architect pick the stronger diff.
 
 The plugin ships the **orchestration skill**: the routing doctrine (which lane, which effort), the cost discipline that keeps Fable token volume minimal, the six-part spec contract that makes context-free delegation safe, the verification rules that keep every lane honest, and how to fold in the official [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc) when it is installed.
 
@@ -55,10 +56,10 @@ Then start your session as the architect:
 
 ## Requirements
 
-- **Claude Code ≥ 2.1.170** with a subscription that includes Fable 5.1. The agents use the `fable` alias. Without Fable access, change `model: fable` to `model: opus` in `agents/fable-advisor.md` and run the session on Opus.
+- **Claude Code ≥ 2.1.170** with a subscription that includes Fable 5.1. The agents use the `fable` alias. Without Fable access, change `model: fable` to `model: opus` in `agents/fable-advisor.md` and `agents/fable-frontend.md` and run the session on Opus.
 - **The [OpenAI Codex CLI](https://github.com/openai/codex)** installed and authenticated (`npm i -g @openai/codex`, then `codex login`) for every codex-backed lane. `codex-implementer` invokes `gpt-5.6-luna`, `sol-implementer` invokes `gpt-5.6-sol`, `astra-advisor` and `astra-operator` invoke `gpt-6-astra`. Without model access or a working CLI a lane reports `STATUS: unavailable`; it never falls back to a Claude model. Without Codex at all, the pattern degrades to advisor-only mode.
 - **Sandbox posture.** The implementation lanes pass no `--sandbox` flag and run at the `sandbox_mode` in your `~/.codex/config.toml`. `codex exec` is `read-only` when the key is unset, so set `sandbox_mode = "workspace-write"` there; the lanes' preflight reports `unavailable` until you do. To run the lanes unsandboxed on a disposable machine, type `/fable-advisor:setup-dangerous-yolo-codex` yourself; nothing else in the plugin will run it.
-- **The browser lane** needs a Codex MCP server named `playwright_chrome` (headless Playwright Chrome, disabled at rest, enabled by the lane per run). The **`playwright-mcp-setup` skill** creates it on any platform by running `scripts/setup-playwright-mcp.sh`, which discovers `node`, `@playwright/mcp`, and Chromium, writes the block with a backup, and proves the server answers an MCP handshake. Run the script with `--check` to see what is missing.
+- **The browser lane** needs a Codex MCP server named `playwright_chrome` (headless Playwright Chrome, disabled at rest, enabled by the lane per run). The **`playwright-mcp-setup` skill** creates it on any platform by running `scripts/setup-playwright-mcp.sh`, which first looks for a packaged `playwright-mcp` launcher on PATH (for example, the nixpkgs package), then discovers `node`, `@playwright/mcp`, and Chromium, writes the block with a backup, and proves the server answers an MCP handshake. Run the script with `--check` to see what is missing.
 - **Optional: the [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc)** (`/plugin marketplace add openai/codex-plugin-cc`, then `/plugin install codex@openai-codex`). The orchestration skill uses `/codex:adversarial-review` as a GPT-family reviewer, `/codex:rescue` as a user-driven delegation path, and `/codex:setup` to diagnose a lane that reports `unavailable`. Not a dependency.
 - **Platforms:** Linux, macOS (`brew install coreutils` for GNU `timeout`), and Windows through Git Bash, which Claude Code's Bash tool already uses. WSL works but cannot see a Windows-side `codex`. On Windows the lane script prints lane paths as `C:/...`, kills process trees through `taskkill`, and checks credential files by ACL: lock a secret file with `icacls <file> /inheritance:r /grant:r "%USERNAME%:F"` before naming it in a brief.
 - If a pinned Claude model is not available on your account, Claude Code silently falls back to your session model; if advisor verdicts feel unremarkable, check your plan. The codex lanes always fail loudly instead.
@@ -119,7 +120,7 @@ touching 3+ files, consult the fable-advisor agent and act on its verdict.
 
 **Does this work on claude.ai?** No; subagent model routing is Claude Code only (CLI, desktop, VS Code, web).
 
-**Why not let Fable write the code too?** You can. It is also the most expensive model per token, and most of a session's tokens are implementation mechanics that the codex lanes handle at near parity, from a different vendor, which buys a real second opinion. Spend the premium where it changes outcomes.
+**Why not let Fable write the code too?** You can. It is also the most expensive model per token, and most of a session's tokens are implementation mechanics that the codex lanes handle at near parity, from a different vendor, which buys a real second opinion. Spend the premium where it changes outcomes. The one built-in exception is user-interface code: the `fable-frontend` lane runs Fable in a clean context because visual and interaction judgment does not survive translation into a spec, and the cross-vendor check moves to the Astra review and the browser run.
 
 **Why GPT lanes in a Claude plugin?** Vendor diversity. Models from one family share blind spots; an independent implementation from a different lineage catches what same-family review misses. The architect and reviewer stay Claude; the lanes are producers, not judges.
 
