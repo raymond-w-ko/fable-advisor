@@ -1,6 +1,6 @@
 {
   "name": "fable-advisor",
-  "version": "5.9.0",
+  "version": "5.10.0",
   "description": "Run your session on Fable 5.1 as a full-time architect: it writes specs and verdicts, GPT-5.6 Luna (via Codex) does the routine typing and GPT-5.6 Sol the high-complexity one-offs, each at a reasoning effort picked per task, and Fable 5.1 reviews every deliverable before it ships. Also ships the astra-operator browser/iOS Simulator/computer-use lane (GPT-6 Astra via Codex with headless Playwright Chrome, or XcodeBuildMCP on macOS) and its computer-use skill, the read-only data-investigator lane (Claude Sonnet) for query runs that keep raw data out of the architect context, the astra-advisor cross-vendor reviewer (GPT-6 Astra via Codex, read-only), and the fable-frontend lane (Fable 5.1 in a clean context) for user-interface code, whose outcome depends on visual judgment a spec carries poorly. The implementation lanes run at the operator's own Codex sandbox_mode; the setup-dangerous-yolo-codex skill (user-typed command only) switches a host to danger-full-access.",
   "author": {
     "name": "Dan McAteer",
