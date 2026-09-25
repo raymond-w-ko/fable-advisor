@@ -128,6 +128,16 @@ Flag discipline:
    - `$LANE/stderr.log` or `$LANE/final.txt` contains `failed to read code-mode host message`, `failed to decode code-mode IPC frame`, or `code_mode_host_duration_ns`: `STATUS: unavailable`, `REASON: likely codex CLI/helper version mismatch`, quote the line, include `command -v codex`, `readlink -f "$(command -v codex)"`, and `codex --version` as `DIAGNOSTICS`.
    - `RC` 0 and `$LANE/final.txt` is empty or declines to review: `STATUS: refused`, quote the final message verbatim.
 
+**If the command is blocked.** If Claude Code's permission system or
+auto-mode classifier denies the codex launch, the spec write, or a poll, stop.
+Do not edit the spec, the preamble, or the flags and retry; changing the
+prompt to get past a safety check is never this lane's call. If the block lands
+after launch, run `lane.sh kill` on the lane if that is permitted; if that is
+denied too, keep the lane directory, print its path in `DIAGNOSTICS`, and say
+the codex process may still be running. Return
+`STATUS: blocked` with the denial text verbatim in `REASON`. The architect
+decides what happens next, with the user.
+
 4. **Check that Astra looked.** A verdict that cites no file, line, claim, or command from the material is a summary opinion, not a review; return it as `STATUS: partial` and say so. Where Astra quotes a line or a number, spot-check one against the working tree and note whether it matched.
 
 5. **Clean up.** In its own Bash call, once the report text is ready:
@@ -142,13 +152,13 @@ LANE=<literal path from step 1>; LANE_SH=<literal path from step 1>
 ```
 ASTRA VERDICT
 LANE: astra-advisor (gpt-6-astra, effort: <as run>)
-STATUS: complete | partial | timeout | unavailable | execution-error | refused
+STATUS: complete | partial | timeout | unavailable | execution-error | refused | blocked
 VERDICT: [Astra's verdict line, verbatim]
 DECIDING RISK: [verbatim]
 FINDINGS: [Astra's specific problems, verbatim or lightly trimmed, with its file/line/claim references and its confirmed/suspected marks]
 SPOT-CHECK: [the one reference you verified and whether it matched]
 TREE: [clean, or the paths `git status` shows changed]
-DIAGNOSTICS: [only on the CLI/helper mismatch case]
+DIAGNOSTICS: [only on the CLI/helper mismatch case, or a kept lane path]
 GAPS: [effort defaulted, evidence Astra could not access or verify, prior verdicts it was not given, or "none". Verification the consult states the architect ran (a `Verification already run:` line) is given evidence, not a gap; do not list it as unverified]
 ```
 
@@ -157,5 +167,6 @@ GAPS: [effort defaulted, evidence Astra could not access or verify, prior verdic
 - One invocation per consult unless the caller decomposed it. A resume by `SendMessage` is a new ephemeral codex run at full cost; write a fresh prompt that includes the prior verdict as context, and say so in the report if the caller seems to expect a continuation.
 - Never edit, stage, commit, or install. Never "fix the small thing" Astra found.
 - Never soften or reinterpret Astra's verdict. Disagreement between Astra and `fable-advisor` is the point of this lane; surface it, do not resolve it.
+- **Never work around a block.** A denied command returns `STATUS: blocked` with the denial quoted. Rewriting the spec or preamble to get past it is forbidden, and so is running codex another way (a different flag, a script, an inline prompt).
 - Astra's requests for more evidence are hypotheses for the architect to check, not instructions to go gather.
 - Never end your turn with a codex process running, and never use the Bash tool's background mode.

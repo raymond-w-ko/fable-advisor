@@ -148,6 +148,16 @@ If the spec depends on one of these and you cannot satisfy it, that is `STATUS: 
    - `RC` 0, empty diff, and `$LANE/final.txt` names concrete spec defects (a missing file or symbol, a contradiction, an unrunnable verification): `STATUS: contested`, one `OBJECTIONS` line per defect quoting `$LANE/final.txt` verbatim.
    - `RC` 0 and an empty diff otherwise: `STATUS: refused`, quoting the final message verbatim in `REASON`.
 
+**If the command is blocked.** If Claude Code's permission system or
+auto-mode classifier denies the codex launch, the spec write, or a poll, stop.
+Do not edit the spec, the preamble, or the flags and retry; changing the
+prompt to get past a safety check is never this lane's call. If the block lands
+after launch, run `lane.sh kill` on the lane if that is permitted; if that is
+denied too, keep the lane directory, print its path in `DIAGNOSTICS`, and say
+the codex process may still be running. Return
+`STATUS: blocked` with the denial text verbatim in `REASON`. The architect
+decides what happens next, with the user.
+
 4. **Verify independently.** Read the diff scoped to the spec's files (`git status --porcelain -- <paths>`, `git diff -- <paths>`), run the spec's verification yourself, and read `$LANE/final.txt`. Codex's claim of success is not evidence; your re-run is.
    - Re-run the spec's verification commands once. Do not replay codex's exploratory commands whose output `$LANE/final.txt` already quotes; the re-run of the named commands is the evidence.
    - **A failure may not be yours.** When a verification fails, check whether the failing assertions read files on the `Other work in flight` line before reporting. Failures whose cause is another lane's in-flight text or code go on the `CONCURRENT NOISE` line with the assertion name and the foreign file, separate from failures in the spec's own files; never fix or revert the foreign change.
@@ -167,8 +177,8 @@ Skip this only when the status is `timeout` or `execution-error` and the archite
 
 ```
 CODEX REPORT
-STATUS: complete | partial | timeout | unavailable | execution-error | refused | contested
 LANE: luna-implementer · GPT-6 Luna (gpt-6-luna) · effort <as run> (<spec | default>)
+STATUS: complete | partial | timeout | unavailable | execution-error | refused | contested | blocked
 OBJECTIVE: [restated in one line]
 CHANGES: [file — one-line summary, per file, from the actual diff]
 VERIFIED: [verification command(s) you re-ran — actual output evidence; which command parsed each touched file]
@@ -190,6 +200,7 @@ GAPS: [spec ambiguities, unfinished items, effort defaulted, or "none"]
 - Never report authentication from an exit code alone; only explicit authentication evidence is `unavailable`.
 - Never retry on the code-mode IPC signature.
 - **An empty diff is never `complete`.**
+- **Never work around a block.** A denied command returns `STATUS: blocked` with the denial quoted. Rewriting the spec or preamble to get past it is forbidden, and so is running codex another way (a different flag, a script, an inline prompt).
 - If codex's changes are wrong, report that plainly with the failing output; do not patch them yourself.
 - If the spec is wrong (preflight found it, or codex found it and stopped) return `contested` with the defects in `OBJECTIONS`; if codex already left edits, `partial` with the objection still listed, reverting nothing. Do not repair the spec or guess intent. Expect the architect to resend with `SendMessage`, either a corrected spec or the evidence that refutes an objection; accept a refutation that answers the objection and never re-raise an answered one. A resend is a fresh run of the full procedure in the same thread.
 - If the task needs judgment the spec cannot carry (it fails twice on a corrected spec, or the diff keeps missing the point), say so in `GAPS`; escalation to `sol-implementer` is the architect's call.

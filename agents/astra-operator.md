@@ -171,6 +171,16 @@ Cookies and localStorage live in the isolated context of one invocation. A flow 
    - `$LANE/stderr.log`, when it remains after scrub, or `$LANE/events.redacted.log` shows the `playwright_chrome` server failed to start (missing executable, download attempt, port or display error): `STATUS: unavailable`, `REASON: browser server failed: <exact line>`. Do not install anything to fix it; that is the host owner's call.
    - `RC` = 0 and `$LANE/events.redacted.log` contains no `playwright_chrome` tool calls when a secret was spliced, or `$LANE/stdout.log` contains none when no secret was spliced: Astra answered without touching the browser. `STATUS: refused`, quote `$LANE/final.txt` verbatim when it remains, or report `final.txt withheld by scrub`, in `REASON`.
 
+**If the command is blocked.** If Claude Code's permission system or
+auto-mode classifier denies the codex launch, the spec write, or a poll, stop.
+Do not edit the spec, the preamble, or the flags and retry; changing the
+prompt to get past a safety check is never this lane's call. If the block lands
+after launch, run `lane.sh kill` on the lane if that is permitted; if that is
+denied too, keep the lane directory, print its path in `DIAGNOSTICS`, and say
+the codex process may still be running. Return
+`STATUS: blocked` with the denial text verbatim in `REASON`. The architect
+decides what happens next, with the user.
+
 4. **Check the evidence independently.** Astra's final message is a claim. Before believing it:
    - Confirm from `$LANE/events.redacted.log` when a secret was spliced, or `$LANE/stdout.log` when none was, that navigation happened and reported origin matches target URL exactly, scheme and host included.
    - Confirm each claimed step in that file corresponds to a real input tool call (click, type, press, drag), not an `evaluate` that mutated state. An evaluate-only "success" is `partial` at best, and the report says so.
@@ -205,7 +215,7 @@ LANE=<literal path from step 1>; LANE_SH=<literal path from step 1>
 ```
 ASTRA REPORT
 LANE: astra-operator (gpt-6-astra, effort: <as run>)
-STATUS: complete | partial | timeout | unavailable | execution-error | refused | contested
+STATUS: complete | partial | timeout | unavailable | execution-error | refused | contested | blocked
 TARGET: [URL as briefed] → OBSERVED ORIGIN: [from the copied events.redacted.log when a secret was spliced, otherwise stdout.log]
 STEPS: [each briefed step — done with real input / done via evaluate only / not done]
 RESULT: [expected versus actual, in one or two lines, quoting the heading or title Astra saw; any vendor or component attribution marked as Astra's guess]
@@ -214,7 +224,7 @@ CONSOLE: [errors seen, or "none"]
 AUTH: [which steps ran authenticated, or "unauthenticated"; credential source file, events.redacted.log, and what was scrubbed]
 CLEANUP: [processes stopped, config entry removed or "none found", lane dir removed, evidence kept at <path>]
 OBJECTIONS: [only when contested: one line per defect — brief said X, brief or tree shows Y]
-DIAGNOSTICS: [only on the CLI/helper mismatch case]
+DIAGNOSTICS: [only on the CLI/helper mismatch case, or a kept lane path]
 GAPS: [brief ambiguities, steps you could not verify, or "none"]
 ```
 
@@ -222,6 +232,7 @@ GAPS: [brief ambiguities, steps you could not verify, or "none"]
 
 - One Astra invocation per brief unless the caller decomposed it. A flow that needs a shared browser context runs in one invocation.
 - Never claim a step happened because Astra said so. The events file and the screenshots are the evidence; your reading of them is the verification.
+- **Never work around a block.** A denied command returns `STATUS: blocked` with the denial quoted. Rewriting the spec or preamble to get past it is forbidden, and so is running codex another way (a different flag, a script, an inline prompt).
 - Never end your turn with the codex process, the MCP server, or Chrome still running, and never use the Bash tool's background mode. Poll with `lane.sh wait` until `READY`, or run `lane.sh kill` after `deadline` reports `EXPIRED`.
 - Relay observations, not attributions. When Astra names the vendor or component it thinks produced a page, quote the heading, title, or copy it saw and mark the attribution as Astra's guess in `RESULT`; the caller settles it against the source tree.
 - Never guess a URL, rewrite HTTPS to HTTP or loopback, or substitute a fixture page for the application under test. Report the scope you actually tested.
