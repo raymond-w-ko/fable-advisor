@@ -4,16 +4,16 @@
 
 > **This is a personal fork** of [DannyMac180/fable-advisor](https://github.com/DannyMac180/fable-advisor) (`upstream`). It adds the detached lane runner (`scripts/lane.sh`), the `astra-operator` browser lane with its `computer-use` skill, the `data-investigator`, `astra-advisor`, and `fable-frontend` lanes, and the operator-owned sandbox posture. Install from this repository (`origin`), not upstream.
 
-<a href="https://github.com/DannyMac180/fable-advisor/raw/main/assets/fable-advisor-demo.mp4"><img src="assets/fable-advisor-demo-poster.png" alt="30-second demo: Fable 5.1 orchestrates, GPT-5.6 Luna implements, Fable 5.1 reviews" width="100%"></a>
+<a href="https://github.com/DannyMac180/fable-advisor/raw/main/assets/fable-advisor-demo.mp4"><img src="assets/fable-advisor-demo-poster.png" alt="30-second demo: Fable 5.1 orchestrates, GPT-6 Luna implements, Fable 5.1 reviews" width="100%"></a>
 
-<p align="center"><em>▶ 30s demo — Fable 5.1 orchestrates → GPT-5.6 Luna implements → Fable 5.1 reviews</em></p>
+<p align="center"><em>▶ 30s demo — Fable 5.1 orchestrates → GPT-6 Luna implements → Fable 5.1 reviews</em></p>
 
 Claude Code lets every subagent run on a different model, and lets the session run on a different model than its subagents. This plugin uses that for the **architect pattern**: your session runs on **Fable 5.1** as a full-time architect. It owns requirements, decomposition, specs, and verification, routes every implementation task to the right lane at a reasoning effort it names per task, and gets a clean-context **Fable 5.1** review of the finished work before calling anything done.
 
 | Lane | Producer | Invocation | Route here when |
 |---|---|---|---|
-| Routine | **GPT-5.6 Luna** | `codex-implementer` agent (default) | The spec fully determines the outcome; Codex does the typing via the [Codex CLI](https://github.com/openai/codex) |
-| High-complexity | **GPT-5.6 Sol** | `sol-implementer` agent | One-off tasks where judgment the spec cannot capture decides the outcome: subtle concurrency, hard debugging, security-sensitive paths, wide refactors |
+| Routine | **GPT-6 Luna** | `luna-implementer` agent (default) | The spec fully determines the outcome; Codex does the typing via the [Codex CLI](https://github.com/openai/codex) |
+| High-complexity | **GPT-6 Sol** | `sol-implementer` agent | One-off tasks where judgment the spec cannot capture decides the outcome: subtle concurrency, hard debugging, security-sensitive paths, wide refactors |
 | Frontend | **Fable 5.1** | `fable-frontend` agent | User-interface code (markup, styles, client-side behavior, charts, tooltips, accessibility) in a clean context: the outcome is judged by what a person sees, which a spec carries poorly and the codex lanes have repeatedly missed; proven by an `astra-operator` browser run and reviewed cross-vendor by `astra-advisor` |
 | Review | **Fable 5.1** | `fable-advisor` agent | Commitment boundaries, and **always once at the end**: the advisor reviews the accumulated changes before the architect reports done |
 | Review, cross-vendor | **GPT-6 Astra** | `astra-advisor` agent | An independent-family second opinion on a decision, diff, or findings document, read-only, after the Fable review on any deliverable of moderate complexity or above |
@@ -57,7 +57,7 @@ Then start your session as the architect:
 ## Requirements
 
 - **Claude Code ≥ 2.1.170** with a subscription that includes Fable 5.1. The agents use the `fable` alias. Without Fable access, change `model: fable` to `model: opus` in `agents/fable-advisor.md` and `agents/fable-frontend.md` and run the session on Opus.
-- **The [OpenAI Codex CLI](https://github.com/openai/codex)** installed and authenticated (`npm i -g @openai/codex`, then `codex login`) for every codex-backed lane. `codex-implementer` invokes `gpt-5.6-luna`, `sol-implementer` invokes `gpt-5.6-sol`, `astra-advisor` and `astra-operator` invoke `gpt-6-astra`. Without model access or a working CLI a lane reports `STATUS: unavailable`; it never falls back to a Claude model. Without Codex at all, the pattern degrades to advisor-only mode.
+- **The [OpenAI Codex CLI](https://github.com/openai/codex)** installed and authenticated (`npm i -g @openai/codex`, then `codex login`) for every codex-backed lane. `luna-implementer` invokes `gpt-6-luna`, `sol-implementer` invokes `gpt-6-sol`, `astra-advisor` and `astra-operator` invoke `gpt-6-astra`. Without model access or a working CLI a lane reports `STATUS: unavailable`; it never falls back to a Claude model. Without Codex at all, the pattern degrades to advisor-only mode.
 - **Sandbox posture.** The implementation lanes pass no `--sandbox` flag and run at the `sandbox_mode` in your `~/.codex/config.toml`. `codex exec` is `read-only` when the key is unset, so set `sandbox_mode = "workspace-write"` there; the lanes' preflight reports `unavailable` until you do. To run the lanes unsandboxed on a disposable machine, type `/fable-advisor:setup-dangerous-yolo-codex` yourself; nothing else in the plugin will run it.
 - **The browser lane** needs a Codex MCP server named `playwright_chrome` (headless Playwright Chrome, disabled at rest, enabled by the lane per run). The **`playwright-mcp-setup` skill** creates it on any platform by running `scripts/setup-playwright-mcp.sh`, which first looks for a packaged `playwright-mcp` launcher on PATH (for example, the nixpkgs package), then discovers `node`, `@playwright/mcp`, and Chromium, writes the block with a backup, and proves the server answers an MCP handshake. Run the script with `--check` to see what is missing.
 - **The iOS Simulator lane** (macOS only) needs a Codex MCP server named `xcodebuildmcp` ([XcodeBuildMCP](https://github.com/cameroncooke/XcodeBuildMCP), disabled at rest, enabled by the same `astra-operator` lane per run when a brief targets a simulator). The **`xcodebuildmcp-setup` skill** creates it by running `scripts/setup-xcodebuildmcp.sh`, which checks Xcode, discovers a packaged `xcodebuildmcp` binary or falls back to a pinned `npx`, writes the block with a backup, and proves the server lists the simulator tools. Building and installing the app under test stays with the project's own tooling; the lane drives the installed app and returns screenshots.
@@ -76,7 +76,7 @@ Add rate limiting to our public API. Design it, delegate the
 implementation, and verify the evidence before you call it done.
 ```
 
-The architect writes the spec, picks the lane and effort (rate limiting touches concurrency, a case for `sol-implementer` at `max`, or for racing it against `codex-implementer`), reads the diff and verification evidence when the report comes back, sends the finished work to `fable-advisor` and then `astra-advisor`, and only then reports done.
+The architect writes the spec, picks the lane and effort (rate limiting touches concurrency, a case for `sol-implementer` at `max`, or for racing it against `luna-implementer`), reads the diff and verification evidence when the report comes back, sends the finished work to `fable-advisor` and then `astra-advisor`, and only then reports done.
 
 ## Lane mechanics
 

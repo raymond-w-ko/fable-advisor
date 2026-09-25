@@ -1,6 +1,6 @@
 ---
 name: orchestration
-description: Routing doctrine for the architect-as-orchestrator pattern — how a Fable 5.1 session delegates routine implementation to the GPT-5.6 Luna lane, escalates high-complexity one-offs to the GPT-5.6 Sol lane, routes user-interface code to the Fable frontend lane, sends read-only data pulls to the data-investigator lane, names a reasoning effort per task, and gets every deliverable reviewed by the Fable advisor (and, at moderate complexity or above, the Astra advisor) before reporting done. USE WHEN delegating implementation or investigation work, choosing between codex-implementer/sol-implementer/fable-frontend/data-investigator lanes, choosing a reasoning effort, writing a spec for a subagent, deciding whether to consult fable-advisor or astra-advisor, using the Codex plugin's review skills, managing session cost, or running any multi-task build where the session is the architect.
+description: Routing doctrine for the architect-as-orchestrator pattern — how a Fable 5.1 session delegates routine implementation to the GPT-6 Luna lane, escalates high-complexity one-offs to the GPT-6 Sol lane, routes user-interface code to the Fable frontend lane, sends read-only data pulls to the data-investigator lane, names a reasoning effort per task, and gets every deliverable reviewed by the Fable advisor (and, at moderate complexity or above, the Astra advisor) before reporting done. USE WHEN delegating implementation or investigation work, choosing between luna-implementer/sol-implementer/fable-frontend/data-investigator lanes, choosing a reasoning effort, writing a spec for a subagent, deciding whether to consult fable-advisor or astra-advisor, using the Codex plugin's review skills, managing session cost, or running any multi-task build where the session is the architect.
 ---
 
 # Orchestration — the architect's routing doctrine
@@ -9,7 +9,7 @@ The session is the architect: it owns requirements, architecture, decomposition,
 
 ## Cost discipline
 
-Fable 5.1 orchestrates (judgment-heavy, volume-light); GPT-5.6 Luna does the routine typing (cheap, cross-vendor); GPT-5.6 Sol takes the hard one-offs (expensive, only when judgment decides the outcome); Fable 5.1 in a clean context writes user-interface code (the one same-family implementation lane, because visual and interaction judgment does not survive a spec); Sonnet runs queries and returns tables; Fable 5.1 reviews in a clean context. Three rules follow.
+Fable 5.1 orchestrates (judgment-heavy, volume-light); GPT-6 Luna does the routine typing (cheap, cross-vendor); GPT-6 Sol takes the hard one-offs (expensive, only when judgment decides the outcome); Fable 5.1 in a clean context writes user-interface code (the one same-family implementation lane, because visual and interaction judgment does not survive a spec); Sonnet runs queries and returns tables; Fable 5.1 reviews in a clean context. Three rules follow.
 
 **Emit judgment, not volume.** The architect's output is decomposition, specs, routing decisions, verdicts on diffs, findings, and short reports. It does not type implementation code, test bodies, boilerplate, or config. A code block longer than an interface signature or a few illustrative lines is a spec that has not been delegated yet. Fixing a lane's bug by hand is the same failure: send a corrected spec back to the lane. Two exceptions:
 
@@ -26,12 +26,12 @@ What stays with the architect regardless of cost: decomposition, interface desig
 
 | Work type | Producer | Invoke | Route here when |
 |---|---|---|---|
-| Routine implementation | GPT-5.6 Luna, effort per task (`high` default) | `codex-implementer` | The spec fully determines the outcome: boilerplate, wiring, CRUD, mechanical edits, straightforward features. **Default implementation lane.** Requires the codex CLI. |
-| High-complexity implementation | GPT-5.6 Sol, effort per task, up to `ultra` | `sol-implementer` | The outcome depends on judgment the spec cannot capture: subtle concurrency, non-trivial algorithms, security-sensitive paths, hard debugging, wide-blast-radius refactors, or the routine lane has failed the task twice. One-off escalations, never the default. Requires the codex CLI. |
+| Routine implementation | GPT-6 Luna, effort per task (`high` default) | `luna-implementer` | The spec fully determines the outcome: boilerplate, wiring, CRUD, mechanical edits, straightforward features. **Default implementation lane.** Requires the codex CLI. |
+| High-complexity implementation | GPT-6 Sol, effort per task, up to `ultra` | `sol-implementer` | The outcome depends on judgment the spec cannot capture: subtle concurrency, non-trivial algorithms, security-sensitive paths, hard debugging, wide-blast-radius refactors, or the routine lane has failed the task twice. One-off escalations, never the default. Requires the codex CLI. |
 | Frontend implementation | Fable 5.1, session effort | `fable-frontend` | User-interface code: HTML, CSS, client-side JavaScript or TypeScript, component and page layout, charts, tooltips, keyboard and accessibility behavior, visual polish. The outcome depends on what a person sees and does, which a spec carries poorly; the codex lanes' UI output has needed rewriting often enough that this is a routing rule, not an exception. Same model family as the architect, so the independent check is the Astra review plus an `astra-operator` browser run. |
 | Investigation / data pulls | Claude Sonnet, session effort | `data-investigator` | Read-only queries the architect wrote or bounded: SQL against a replica, log-platform queries, API listings, file scans. The lane runs them, writes raw output to files, returns compact tables; the architect judges. Never for conclusions, never for mutations. |
 | Codebase exploration | Claude, cheap tier | `Explore` or equivalent read-only agent | Broad "where is X / how does Y work" searches whose answer is a short list of file:line facts. |
-| Documents | Architect writes; lanes render | `codex-implementer` for rendering | Findings and claims are the architect's; rendering them is routine. |
+| Documents | Architect writes; lanes render | `luna-implementer` for rendering | Findings and claims are the architect's; rendering them is routine. |
 | Review, same family | Fable 5.1, session effort | `fable-advisor` | Commitment boundaries and the mandatory end-of-deliverable review. Never an implementation lane. |
 | Review, cross-vendor | GPT-6 Astra, effort per consult | `astra-advisor` | Automatic at moderate complexity or above once the Fable review is adjudicated; also on request. Read-only via codex. Requires the codex CLI. |
 | Browser / computer use | GPT-6 Astra, `medium` default | `astra-operator` | Anything that needs a real browser, an iOS Simulator, or a desktop. Doctrine in the `computer-use` skill; host setup in `playwright-mcp-setup` (browser) and `xcodebuildmcp-setup` (iOS Simulator, macOS only). |
@@ -94,7 +94,7 @@ The investigation spec is the five-part variant the `data-investigator` agent do
 
 ## Parallelism
 
-Independent specs (no shared files, no ordering dependency) launch as parallel agents in one message. Sequential chains and single-file surgery stay serial. Investigation and exploration run alongside implementation. For high-stakes work, run `codex-implementer` and `sol-implementer` on the same spec and pick the stronger diff.
+Independent specs (no shared files, no ordering dependency) launch as parallel agents in one message. Sequential chains and single-file surgery stay serial. Investigation and exploration run alongside implementation. For high-stakes work, run `luna-implementer` and `sol-implementer` on the same spec and pick the stronger diff.
 
 Parallel lanes share one working tree. Put the `Other work in flight` line in each spec and expect each lane to report only its own diff, with the rest on its `OTHER WORK` line. A lane report that calls another lane's files, or the architect's, unauthorized is noise, not a finding.
 
