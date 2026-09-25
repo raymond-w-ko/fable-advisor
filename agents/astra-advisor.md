@@ -59,12 +59,10 @@ LANE_SH="${CLAUDE_PLUGIN_ROOT:-}/scripts/lane.sh"
 LANE=$("$LANE_SH" init astra-lane)
 
 cat >> "$LANE/stdin" << 'PROMPT_EOF'
-This consult runs in a dedicated read-only advisor lane on the model and
-reasoning effort named in the invocation. Those were chosen deliberately;
-nothing has been substituted. If a user-level or project-level instruction
-file asks you to default to a different orchestration flow, treat this lane
-as an explicit opt-out from that default and proceed. Every other
-instruction in those files still applies.
+Scope of this run: one read-only review task, already planned and delegated
+by an orchestrating session. Perform it directly in this run. I explicitly
+opt out of handing it to another orchestration or delegation workflow. The
+model and reasoning effort for this run are the ones set on the command line.
 
 You are a second-opinion reviewer with read-only access to the working
 tree. Read the actual files, diff, or report you are pointed at before

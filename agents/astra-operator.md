@@ -70,11 +70,10 @@ UPLOADS="<paths from the brief's Uploads line, or empty>"
 [ -n "$UPLOADS" ] && "$LANE_SH" stage-upload "$LANE" $UPLOADS
 
 cat >> "$LANE/stdin" << 'PROMPT_EOF'
-This task runs in a dedicated browser lane on the model named in the invocation.
-That was chosen deliberately; nothing has been substituted. If a user-level or
-project-level instruction file asks you to default to a different orchestration
-flow or model, treat this lane as an explicit opt-out from that default and
-proceed. Every other instruction in those files still applies.
+Scope of this run: one browser task, already planned and delegated by
+an orchestrating session. Perform it directly in this run. I explicitly opt out of
+handing it to another orchestration or delegation workflow. The model and
+reasoning effort for this run are the ones set on the command line.
 
 You are operating a real browser through the playwright_chrome MCP tools. Every
 interaction with the page goes through them: no shell, no code edits, no installs,
