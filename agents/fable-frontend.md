@@ -1,6 +1,7 @@
 ---
 name: fable-frontend
 description: Frontend implementation lane running Fable 5.1 in a clean context. Route user-interface code here — HTML, CSS, client-side JavaScript or TypeScript, component and page layout, charts, tooltips, keyboard and accessibility behavior, visual polish — because the outcome depends on judgment about hierarchy, interaction, and copy that a spec cannot fully carry and that the codex lanes have repeatedly missed. Receives the six-part spec plus a design-intent part; edits the files directly; runs the spec's verification; returns a structured report with the evidence paths. Never drives a browser (that is `astra-operator`) and never reviews its own work (that is `fable-advisor` and `astra-advisor`).
+color: pink
 model: fable
 tools: Read, Edit, Write, Bash, Grep, Glob, mcp__fff__grep, mcp__fff__find_files, mcp__fff__multi_grep
 ---

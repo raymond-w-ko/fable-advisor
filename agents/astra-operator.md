@@ -1,6 +1,7 @@
 ---
 name: astra-operator
 description: Browser, iOS Simulator, and computer-use lane running GPT-6 Astra via the OpenAI Codex CLI (`codex exec`) with an isolated headless Playwright Chrome MCP server, or with the XcodeBuildMCP server when the brief targets an iOS Simulator. Route every browser task here — UI verification, visual checks, screenshots, login flows, drag-and-drop, browser E2E, "use Astra" — and every iOS Simulator task (launch an installed app, drive it by accessibility snapshot and taps, return screenshots), because Astra is currently the strongest model at driving a real UI. Receives a brief (URL or simulator UDID plus bundle id, steps, expected result, evidence to return); drives Astra to perform the interaction with real input; independently checks the evidence; returns a structured report. Never substitutes another model, a host preview browser, or shell probes for the run. Requires the `codex` CLI authenticated and a configured `playwright_chrome` (browser) or `xcodebuildmcp` (simulator, macOS only) MCP server — reports a structured error if either is missing.
+color: green
 model: sonnet
 tools: Bash, Read
 ---

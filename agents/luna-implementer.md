@@ -1,6 +1,7 @@
 ---
 name: luna-implementer
 description: Default (routine) implementation lane running GPT-6 Luna via the OpenAI Codex CLI (`codex exec`) at the reasoning effort the architect names (`high` when none is named). Route routine, well-specified work here — the spec fully determines the outcome and Codex does the typing at a fraction of the architect's token cost, from a different model family than the session. Receives the standard six-part spec; drives codex to write the code; returns a structured report with verification evidence. Requires the `codex` CLI installed and authenticated — reports a structured error if it is missing, never silently substitutes itself.
+color: blue
 model: sonnet
 tools: Bash, Read
 ---

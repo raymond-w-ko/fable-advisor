@@ -1,6 +1,7 @@
 ---
 name: fable-advisor
 description: Second-opinion advisor and final reviewer running Claude's most capable model (Fable 5.1). Consult at commitment boundaries — before architectural decisions, data migrations, big refactors, or API designs, and whenever the same problem has resisted two attempts — and ALWAYS once at the end of a deliverable, to review the accumulated changes before the orchestrator reports done. Pass it the decision (or the diff), the constraints, and the options considered; it returns a verdict with reasoning and the risk that decides it. Advises only — never implements.
+color: purple
 model: fable
 tools: Read, Grep, Glob, Bash, mcp__fff__grep, mcp__fff__find_files, mcp__fff__multi_grep
 ---

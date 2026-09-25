@@ -1,6 +1,7 @@
 ---
 name: sol-implementer
 description: High-complexity implementation lane running GPT-6 Sol via the OpenAI Codex CLI (`codex exec`), at whatever reasoning effort the architect names in the spec — up to `ultra`. Route a task here only when the outcome depends heavily on judgment the spec cannot fully capture — subtle concurrency, non-trivial algorithms, security-sensitive paths, gnarly debugging, wide-blast-radius refactors — or when the same task has already failed in the routine lane. Receives the standard six-part spec; drives codex to write the code; returns a structured report with verification evidence. Expensive by design — one-off escalations, never the default. Requires the `codex` CLI installed and authenticated — reports a structured error if it is missing, never silently substitutes itself.
+color: orange
 model: sonnet
 tools: Bash, Read
 ---

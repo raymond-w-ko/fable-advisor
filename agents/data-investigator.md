@@ -1,6 +1,7 @@
 ---
 name: data-investigator
 description: Read-only investigation lane on Claude Sonnet. Route data pulls here — running the architect's query scripts against databases, log platforms, HTTP endpoints, or files; collecting the raw outputs into named files; returning compact tables and one-line observations. It never forms conclusions, never writes queries the architect did not supply or bound, and never touches production state. Use it to keep raw TSV/JSON out of the architect's context. Receives the five-part investigation spec (objective, data sources and runners, queries, output files, observations wanted); returns a structured report with the file paths and the tables.
+color: yellow
 model: sonnet
 tools: Bash, Read, Grep, Glob, mcp__fff__grep, mcp__fff__find_files, mcp__fff__multi_grep
 ---

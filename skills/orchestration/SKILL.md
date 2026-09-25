@@ -75,6 +75,10 @@ Plan the split before the first dispatch, not after the first timeout.
 - A `fable-advisor` consult costs cents and returns in under a minute for a diff of a few hundred lines; a second pass on the same advisor costs less because its context is retained.
 - An `astra-advisor` consult is a full codex run: 5 to 15 minutes, more for a diff of several hundred lines.
 
+## Showing which model runs each step
+
+Claude Code's UI shows each subagent call by its agent name and the `description` you pass, and the lane wrappers themselves run on Sonnet, so without a label nobody watching can tell which model did the typing. Label every Agent `description` with the model and effort, in the form `<Model> · <effort>: <task>`: for example `GPT-6 Luna · high: add pagination to /orders`, `GPT-6 Sol · xhigh: fix token-refresh race`, `Fable 5.1: final review`, `GPT-6 Astra · high: review the diff`. Keep the lane's `LANE:` line when you summarize a report; it names the model and effort that actually ran, and the implementation lanes also say whether the effort came from the spec or the default. The agents carry UI colors (Luna blue, Sol orange, Fable advisor purple, Astra advisor cyan, Astra operator green, data-investigator yellow, fable-frontend pink) so lanes are easy to tell apart in the transcript.
+
 ## The spec contract
 
 Implementers share none of your conversation context. Every delegation prompt carries six parts:
